@@ -1,0 +1,8 @@
+# Copy this file to local.properties and fill in your keys.
+# local.properties is git-ignored — never commit API keys.
+
+sdk.dir=/path/to/android/sdk
+
+# Self-hosted server URLs (defaults point to the production servers)
+songgen.base.url=http://82.10.52.198:8000
+gemma.base.url=http://82.10.52.198:8001
