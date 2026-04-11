@@ -1,6 +1,7 @@
 package io.cadence.music.data.sensor
 
 import io.cadence.music.data.model.SensorState
+import io.cadence.music.domain.ReadinessCalculator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -19,8 +20,11 @@ class SensorStateCollector @Inject constructor(
     private val sleepRepository: SleepRepository,
     private val healthExtrasRepository: HealthExtrasRepository,
     private val weatherRepository: WeatherRepository,
+    private val readinessCalculator: ReadinessCalculator,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    val healthDiagnostic = healthDataManager.diagnostic
 
     val sensorState: Flow<SensorState> = combine(
         locationRepository.locationData,
@@ -37,20 +41,19 @@ class SensorStateCollector @Inject constructor(
         val extras = values[4] as HealthExtras
         val weather = values[5] as String
 
-        // Only compute energy when we have at least one real signal.
-        // 0 means "no data" — the UI shows "—" in that case.
-        val hasHr       = heartRate > 0
-        val hasActivity = activityMins > 0
-        val hasSleep    = sleep.durationHours > 0f
-        val energyScore = if (!hasHr && !hasActivity && !hasSleep) {
-            0
-        } else {
-            var score = 50
-            if (hasHr)       score += ((heartRate - 70) / 5).coerceIn(-15, 20)
-            if (hasActivity) score += (activityMins / 3).coerceAtMost(20)
-            if (hasSleep)    score += ((sleep.score - 50) / 4).coerceIn(-15, 15)
-            score.coerceIn(1, 100) // 0 is reserved for "no data"
-        }
+        val hasSleep = sleep.durationHours > 0f
+
+        val readiness = readinessCalculator.compute(
+            ReadinessCalculator.Inputs(
+                sleepScore = if (hasSleep) sleep.score else 0,
+                hrvToday = extras.hrvRmssd,
+                hrvBaseline = extras.hrvBaseline,
+                restingHrToday = extras.restingHr,
+                restingHrBaseline = extras.restingHrBaseline,
+                yesterdayActiveKcal = extras.yesterdayActiveKcal,
+                activeKcalBaseline = extras.activeKcalBaseline,
+            )
+        )
 
         SensorState(
             speedKmh = location.speedKmh,
@@ -59,7 +62,6 @@ class SensorStateCollector @Inject constructor(
             weather = weather,
             latitude = location.latitude,
             longitude = location.longitude,
-            energyScore = energyScore,
             sleepScore = if (hasSleep) sleep.score else 0,
             sleepHours = sleep.durationHours,
             sleepDeepPct = sleep.deepSleepPct,
@@ -73,6 +75,8 @@ class SensorStateCollector @Inject constructor(
             caloriesBurned = extras.caloriesBurned,
             stepsToday = extras.stepsToday,
             distanceKm = extras.distanceKm,
+            readinessScore = readiness.score,
+            readinessBreakdown = readiness.breakdown,
         )
     }
 
@@ -101,4 +105,6 @@ class SensorStateCollector @Inject constructor(
         val loc = locationRepository.locationData.first()
         weatherRepository.refresh(loc.latitude, loc.longitude, force = true)
     }
+
+    suspend fun hasHeartRatePermission(): Boolean = healthDataManager.hasHeartRatePermission()
 }

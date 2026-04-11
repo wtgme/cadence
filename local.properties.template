@@ -3,6 +3,12 @@
 
 sdk.dir=/path/to/android/sdk
 
-# Self-hosted server URLs (defaults point to the production servers)
+# Gemini API key — required for prompt translation via Google Gemini.
+# Obtain from https://aistudio.google.com/app/apikey
+gemini.api.key=YOUR_GEMINI_API_KEY
+
+# Self-hosted server URLs (MusicGen remains on the local server for audio generation)
 songgen.base.url=http://82.10.52.198:8000
-gemma.base.url=http://82.10.52.198:8001
+
+# Legacy Gemma URL — no longer used; Gemini replaces Gemma for prompt translation.
+# gemma.base.url=http://82.10.52.198:8001

@@ -37,7 +37,6 @@ fun DebugScreen(viewModel: DebugViewModel = hiltViewModel()) {
 
             Text("— Health —", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.5f))
             Text("SpO2: ${if (state.spo2 > 0) "${state.spo2}%" else "—"}", color = Color.White)
-            Text("Energy: ${state.energyScore}/100", color = Color.White)
             Text("BP: ${if (state.bloodPressureSystolic > 0) "${state.bloodPressureSystolic}/${state.bloodPressureDiastolic} mmHg" else "—"}", color = Color.White)
             Text("Temp: ${if (state.bodyTemperature > 0f) "${"%.1f".format(state.bodyTemperature)}°C" else "—"}", color = Color.White)
 

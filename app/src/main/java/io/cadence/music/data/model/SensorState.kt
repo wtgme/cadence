@@ -7,7 +7,6 @@ data class SensorState(
     val weather: String = "Clear",
     val latitude: Double = 0.0,
     val longitude: Double = 0.0,
-    val energyScore: Int = 0,           // 0 = no data; 1-100 = real computed value
     val sleepScore: Int = 0,           // 0 = no data; 1-100 = real computed value
     val sleepHours: Float = 0f,
     val sleepDeepPct: Float = 0f,
@@ -21,4 +20,7 @@ data class SensorState(
     val bloodPressureDiastolic: Int = 0,
     val bodyTemperature: Float = 0f,
     val floorsClimbed: Int = 0,
+    // Readiness
+    val readinessScore: Int = 0,           // 0 = unknown; 1..100 otherwise
+    val readinessBreakdown: String = "",   // e.g. "Sleep +18, HRV +5, RHR -2"
 )

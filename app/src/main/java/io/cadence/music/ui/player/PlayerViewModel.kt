@@ -4,12 +4,16 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.cadence.music.audio.MusicOrchestrator
+import io.cadence.music.audio.PlaybackProgress
 import io.cadence.music.audio.PlaybackState
 import io.cadence.music.data.api.SongParams
+import io.cadence.music.data.model.GeneratedSong
 import io.cadence.music.data.model.Scene
 import io.cadence.music.data.model.SensorState
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -43,8 +47,24 @@ class PlayerViewModel @Inject constructor(
     val lastError: StateFlow<String?> = orchestrator.lastError
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
+    val songHistory: StateFlow<List<GeneratedSong>> = orchestrator.songHistory
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val playbackProgress: StateFlow<PlaybackProgress> = orchestrator.playbackProgress
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PlaybackProgress())
+
+    private val _isRefreshingBiometrics = MutableStateFlow(false)
+    val isRefreshingBiometrics: StateFlow<Boolean> = _isRefreshingBiometrics.asStateFlow()
+
+    val hasHealthPermissions: StateFlow<Boolean> = orchestrator.hasHealthPermissions
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    val healthDiagnostic: StateFlow<String?> = orchestrator.healthDiagnostic
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
     init {
         orchestrator.startDetection()
+        viewModelScope.launch { orchestrator.checkHealthPermissions() }
     }
 
     fun startPlayback() = orchestrator.startPlayback()
@@ -57,8 +77,26 @@ class PlayerViewModel @Inject constructor(
 
     fun retryGeneration() = orchestrator.retryGeneration()
 
+    fun skipToNext() = orchestrator.skipToNext()
+
+    fun skipToPrevious() = orchestrator.skipToPrevious()
+
+    fun seekTo(positionMs: Long) = orchestrator.seekTo(positionMs)
+
+    fun recheckHealthPermissions() {
+        viewModelScope.launch { orchestrator.checkHealthPermissions() }
+    }
+
     fun refreshBiometrics() {
-        viewModelScope.launch { orchestrator.refreshBiometrics() }
+        if (_isRefreshingBiometrics.value) return
+        viewModelScope.launch {
+            _isRefreshingBiometrics.value = true
+            try {
+                orchestrator.refreshBiometrics()
+            } finally {
+                _isRefreshingBiometrics.value = false
+            }
+        }
     }
 
     override fun onCleared() {

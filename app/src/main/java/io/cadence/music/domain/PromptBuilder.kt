@@ -23,15 +23,6 @@ class PromptBuilder @Inject constructor() {
             null -> "Stationary"
         }
 
-        val energyLabel = when {
-            state.energyScore == 0  -> "unknown"
-            state.energyScore >= 80 -> "Very high energy"
-            state.energyScore >= 60 -> "High energy"
-            state.energyScore >= 40 -> "Moderate energy"
-            state.energyScore >= 20 -> "Low energy"
-            else -> "Very low energy"
-        }
-
         val sleepLabel = when {
             state.sleepScore == 0  -> "unknown"
             state.sleepScore >= 80 -> "Well-rested"
@@ -55,7 +46,9 @@ class PromptBuilder @Inject constructor() {
             append("HR: ${if (state.heartRate > 0) "${state.heartRate} bpm" else "unknown"}, ")
             append("Location: ${"%.4f".format(state.latitude)}, ${"%.4f".format(state.longitude)}, ")
             append("Today: ${state.stepsToday} steps, ${state.activityMinutesToday} mins, ${"%.0f".format(state.caloriesBurned)} kcal, ")
-            append("Energy: $energyLabel${if (state.energyScore > 0) " (${state.energyScore}/100)" else ""}, ")
+            if (state.readinessScore > 0) {
+                append("Readiness: ${state.readinessScore}/100 (${state.readinessBreakdown}), ")
+            }
             append("Sleep: $sleepLabel${if (state.sleepScore > 0) " (${state.sleepScore}/100)" else ""}, ")
             append("Time: $timeLabel")
         }

@@ -2,7 +2,6 @@ package io.cadence.music.audio
 
 import android.content.Intent
 import android.content.pm.ServiceInfo
-import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
 import android.util.Log
@@ -33,7 +32,7 @@ class MusicPlayerService : MediaSessionService() {
     private lateinit var mediaSession: MediaSession
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var feedJob: Job? = null
-    private var scheduleJob: Job? = null
+    private var positionJob: Job? = null
     private var isPlaying = false
 
     // Files queued into ExoPlayer in order — head is the currently playing file
@@ -65,14 +64,14 @@ class MusicPlayerService : MediaSessionService() {
 
         player.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                // Previous song finished — delete its file immediately to free space
+                // Previous song finished — delete its file to free space
                 enqueuedFiles.removeFirstOrNull()?.let { played ->
                     if (played.delete()) Log.d(TAG, "Deleted: ${played.name}")
                 }
-                // Schedule next generation based on the now-current song's duration
-                enqueuedFiles.firstOrNull()?.let { scheduleNextGeneration(it) }
-                // Feed the already-generated clip (from the scheduled generation of the previous song)
+                // Feed the next buffered clip into ExoPlayer immediately
                 feedNextChunk()
+                // Start generating the one after that right away so it's ready in time
+                bufferManager.onChunkStarted()
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
@@ -96,9 +95,14 @@ class MusicPlayerService : MediaSessionService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
-        if (intent?.action == ACTION_PLAY && !isPlaying) {
-            isPlaying = true
-            startFeedLoop()
+        when (intent?.action) {
+            ACTION_PLAY -> if (!isPlaying) { isPlaying = true; startFeedLoop(); startPositionUpdates() }
+            ACTION_SKIP_NEXT -> skipToNext()
+            ACTION_SKIP_PREV -> player.seekTo(0)
+            ACTION_SEEK -> {
+                val pos = intent.getLongExtra(EXTRA_SEEK_POSITION_MS, 0L)
+                player.seekTo(pos)
+            }
         }
         return START_STICKY
     }
@@ -108,12 +112,33 @@ class MusicPlayerService : MediaSessionService() {
     override fun onDestroy() {
         isPlaying = false
         feedJob?.cancel()
-        scheduleJob?.cancel()
+        positionJob?.cancel()
+        bufferManager.updateProgress(0L, 0L)
         enqueuedFiles.forEach { it.delete() }
         enqueuedFiles.clear()
         mediaSession.release()
         player.release()
         super.onDestroy()
+    }
+
+    private fun startPositionUpdates() {
+        positionJob?.cancel()
+        positionJob = scope.launch {
+            while (true) {
+                val pos = player.currentPosition.coerceAtLeast(0L)
+                val dur = player.duration.let { if (it == C.TIME_UNSET) 0L else it }
+                bufferManager.updateProgress(pos, dur)
+                delay(500)
+            }
+        }
+    }
+
+    private fun skipToNext() {
+        if (player.hasNextMediaItem()) {
+            player.seekToNextMediaItem()
+        } else {
+            bufferManager.onChunkStarted()
+        }
     }
 
     private fun startFeedLoop() {
@@ -127,24 +152,9 @@ class MusicPlayerService : MediaSessionService() {
             player.prepare()
             player.play()
             Log.d(TAG, "Playback started: ${first.name}")
-            // Schedule next generation based on this song's duration
-            scheduleNextGeneration(first)
             // Pre-enqueue the already-buffered second clip for gapless transition
             feedNextChunk()
-        }
-    }
-
-    /**
-     * Reads [file]'s duration and triggers generation of the NEXT song
-     * [GENERATION_LEAD_MS] before the current one ends, so it's ready in time.
-     */
-    private fun scheduleNextGeneration(file: File) {
-        scheduleJob?.cancel()
-        scheduleJob = scope.launch(Dispatchers.IO) {
-            val durationMs = getAudioDurationMs(file)
-            val delayMs = (durationMs - GENERATION_LEAD_MS).coerceAtLeast(0L)
-            Log.d(TAG, "${file.name}: duration=${durationMs}ms → generating next in ${delayMs}ms")
-            delay(delayMs)
+            // Immediately kick off the third clip so it's ready before the second ends
             bufferManager.onChunkStarted()
         }
     }
@@ -167,29 +177,18 @@ class MusicPlayerService : MediaSessionService() {
             player.seekTo(player.mediaItemCount - 1, 0)
             player.prepare()
             player.play()
-            scheduleNextGeneration(file)
+            bufferManager.onChunkStarted()
             feedNextChunk()
             Log.d(TAG, "Resumed after gap: ${file.name}")
         }
     }
 
-    private fun getAudioDurationMs(file: File): Long = try {
-        MediaMetadataRetriever().use { retriever ->
-            retriever.setDataSource(file.absolutePath)
-            retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-                ?.toLongOrNull() ?: DEFAULT_DURATION_MS
-        }
-    } catch (e: Exception) {
-        Log.w(TAG, "Could not read duration for ${file.name}: ${e.message}")
-        DEFAULT_DURATION_MS
-    }
-
     companion object {
         const val ACTION_PLAY = "io.cadence.music.action.PLAY"
+        const val ACTION_SKIP_NEXT = "io.cadence.music.action.SKIP_NEXT"
+        const val ACTION_SKIP_PREV = "io.cadence.music.action.SKIP_PREV"
+        const val ACTION_SEEK = "io.cadence.music.action.SEEK"
+        const val EXTRA_SEEK_POSITION_MS = "seek_position_ms"
         private const val TAG = "MusicPlayerService"
-        /** Start generating the next song this many ms before the current one ends. */
-        private const val GENERATION_LEAD_MS = 60_000L
-        /** Fallback duration if metadata is unreadable. */
-        private const val DEFAULT_DURATION_MS = 240_000L
     }
 }

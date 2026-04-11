@@ -5,6 +5,7 @@ import android.content.Intent
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.cadence.music.data.api.SongParams
+import io.cadence.music.data.model.GeneratedSong
 import io.cadence.music.data.model.Scene
 import io.cadence.music.data.model.SensorState
 import io.cadence.music.data.sensor.LocationService
@@ -45,6 +46,11 @@ class MusicOrchestrator @Inject constructor(
     private val _currentSensorState = MutableStateFlow(SensorState())
     val currentSensorState: StateFlow<SensorState> = _currentSensorState
 
+    private val _hasHealthPermissions = MutableStateFlow(true)
+    val hasHealthPermissions: StateFlow<Boolean> = _hasHealthPermissions
+
+    val healthDiagnostic: StateFlow<String?> = sensorStateCollector.healthDiagnostic
+
     private val _playbackState = MutableStateFlow(PlaybackState.IDLE)
     val playbackState: StateFlow<PlaybackState> = _playbackState
 
@@ -52,6 +58,8 @@ class MusicOrchestrator @Inject constructor(
     val currentMetricsContext: StateFlow<String> = bufferManager.currentMetricsContext
     val currentSongParams: StateFlow<SongParams?> = bufferManager.currentSongParams
     val lastError: StateFlow<String?> = bufferManager.lastError
+    val songHistory = bufferManager.songHistory
+    val playbackProgress = bufferManager.playbackProgress
 
     private var detectionJob: Job? = null
     private var sceneJob: Job? = null
@@ -143,12 +151,45 @@ class MusicOrchestrator @Inject constructor(
 
     fun retryGeneration() = bufferManager.retryGeneration()
 
+    fun skipToNext() {
+        if (playbackStarted) {
+            context.startService(Intent(context, MusicPlayerService::class.java).apply {
+                action = MusicPlayerService.ACTION_SKIP_NEXT
+            })
+        }
+    }
+
+    fun skipToPrevious() {
+        if (playbackStarted) {
+            context.startService(Intent(context, MusicPlayerService::class.java).apply {
+                action = MusicPlayerService.ACTION_SKIP_PREV
+            })
+        }
+    }
+
+    fun seekTo(positionMs: Long) {
+        if (playbackStarted) {
+            context.startService(Intent(context, MusicPlayerService::class.java).apply {
+                action = MusicPlayerService.ACTION_SEEK
+                putExtra(MusicPlayerService.EXTRA_SEEK_POSITION_MS, positionMs)
+            })
+        }
+    }
+
     suspend fun forceScene(scene: Scene) {
         sceneStateMachine.forceScene(scene)
     }
 
     suspend fun refreshBiometrics() {
+        _hasHealthPermissions.value = sensorStateCollector.hasHeartRatePermission()
+        Log.d(TAG, "Refresh: HC heart rate permission granted = ${_hasHealthPermissions.value}")
         sensorStateCollector.refreshAll()
+        // Push updated state to UI even if the detection loop was stopped
+        _currentSensorState.value = sensorStateCollector.sensorState.first()
+    }
+
+    suspend fun checkHealthPermissions() {
+        _hasHealthPermissions.value = sensorStateCollector.hasHeartRatePermission()
     }
 
     companion object {

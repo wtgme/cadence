@@ -10,7 +10,9 @@ import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
 import androidx.health.connect.client.records.BodyTemperatureRecord
 import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.FloorsClimbedRecord
+import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
 import androidx.health.connect.client.records.OxygenSaturationRecord
+import androidx.health.connect.client.records.RestingHeartRateRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
@@ -39,6 +41,13 @@ data class HealthExtras(
     val caloriesBurned: Float = 0f,
     val stepsToday: Long = 0,
     val distanceKm: Float = 0f,
+    // Readiness inputs
+    val restingHr: Int = 0,               // bpm, 0 = unknown
+    val restingHrBaseline: Float = 0f,    // 14-day mean, 0 = unknown
+    val hrvRmssd: Float = 0f,             // ms RMSSD, 0 = unknown
+    val hrvBaseline: Float = 0f,          // 14-day mean, 0 = unknown
+    val yesterdayActiveKcal: Float = 0f,  // 0 = unknown
+    val activeKcalBaseline: Float = 0f,   // 14-day mean, 0 = unknown
 )
 
 @Singleton
@@ -102,6 +111,11 @@ class HealthExtrasRepository @Inject constructor(
         val now = Instant.now()
         val twentyFourHoursAgo = now.minusSeconds(86_400)
         val startOfDay = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant()
+        // Use today's totals once we're a few hours past midnight; otherwise fall back to a
+        // rolling 24h window so cumulative metrics (steps/calories/distance) aren't empty
+        // right after midnight. Threshold: at least 3h of "today" must have elapsed.
+        val threeHoursAfterStartOfDay = startOfDay.plusSeconds(3 * 3600)
+        val cumulativeStart = if (now.isAfter(threeHoursAfterStartOfDay)) startOfDay else twentyFourHoursAgo
 
         // Point-in-time metrics: Read latest records
         if (HealthPermission.getReadPermission(OxygenSaturationRecord::class) in granted) {
@@ -173,7 +187,7 @@ class HealthExtrasRepository @Inject constructor(
             try {
                 val response = client.readRecords(ReadRecordsRequest(
                     recordType = StepsRecord::class,
-                    timeRangeFilter = TimeRangeFilter.between(startOfDay, now),
+                    timeRangeFilter = TimeRangeFilter.between(cumulativeStart, now),
                 ))
                 _extras.value = _extras.value.copy(stepsToday = response.records.sumOf { it.count })
             } catch (e: Exception) {
@@ -187,7 +201,7 @@ class HealthExtrasRepository @Inject constructor(
             try {
                 val response = client.readRecords(ReadRecordsRequest(
                     recordType = DistanceRecord::class,
-                    timeRangeFilter = TimeRangeFilter.between(startOfDay, now),
+                    timeRangeFilter = TimeRangeFilter.between(cumulativeStart, now),
                 ))
                 val totalM = response.records.sumOf { it.distance.inMeters }
                 _extras.value = _extras.value.copy(distanceKm = (totalM / 1000.0).toFloat())
@@ -202,7 +216,7 @@ class HealthExtrasRepository @Inject constructor(
             try {
                 val response = client.readRecords(ReadRecordsRequest(
                     recordType = ActiveCaloriesBurnedRecord::class,
-                    timeRangeFilter = TimeRangeFilter.between(startOfDay, now),
+                    timeRangeFilter = TimeRangeFilter.between(cumulativeStart, now),
                 ))
                 val totalKcal = response.records.sumOf { it.energy.inKilocalories }
                 _extras.value = _extras.value.copy(caloriesBurned = totalKcal.toFloat())
@@ -220,7 +234,7 @@ class HealthExtrasRepository @Inject constructor(
             try {
                 val response = client.readRecords(ReadRecordsRequest(
                     recordType = TotalCaloriesBurnedRecord::class,
-                    timeRangeFilter = TimeRangeFilter.between(startOfDay, now),
+                    timeRangeFilter = TimeRangeFilter.between(cumulativeStart, now),
                 ))
                 val totalKcal = response.records.sumOf { it.energy.inKilocalories }
                 if (totalKcal > 0) {
@@ -237,7 +251,7 @@ class HealthExtrasRepository @Inject constructor(
             try {
                 val response = client.readRecords(ReadRecordsRequest(
                     recordType = FloorsClimbedRecord::class,
-                    timeRangeFilter = TimeRangeFilter.between(startOfDay, now),
+                    timeRangeFilter = TimeRangeFilter.between(cumulativeStart, now),
                 ))
                 val total = response.records.sumOf { it.floors }.toInt()
                 _extras.value = _extras.value.copy(floorsClimbed = total)
@@ -245,6 +259,116 @@ class HealthExtrasRepository @Inject constructor(
                 if (isQuotaExceeded(e)) Log.w(TAG, "Floors: Quota exceeded")
                 else Log.w(TAG, "Floors read failed", e)
             }
+            delay(EXTRA_REQUEST_DELAY_MS)
+        }
+
+        // ——— Readiness inputs ———
+        val baselineStart = now.minusSeconds(BASELINE_DAYS * 86_400L)
+        val yesterdayStart = LocalDate.now().minusDays(1)
+            .atStartOfDay(ZoneId.systemDefault()).toInstant()
+        val yesterdayEnd = startOfDay
+
+        readRestingHeartRate(client, granted, baselineStart, now)
+        delay(EXTRA_REQUEST_DELAY_MS)
+        readHrv(client, granted, baselineStart, now)
+        delay(EXTRA_REQUEST_DELAY_MS)
+        readActiveKcalBaseline(client, granted, baselineStart, yesterdayStart, yesterdayEnd)
+    }
+
+    private suspend fun readRestingHeartRate(
+        client: HealthConnectClient,
+        granted: Set<String>,
+        baselineStart: Instant,
+        now: Instant,
+    ) {
+        if (HealthPermission.getReadPermission(RestingHeartRateRecord::class) !in granted) return
+        try {
+            val response = client.readRecords(ReadRecordsRequest(
+                recordType = RestingHeartRateRecord::class,
+                timeRangeFilter = TimeRangeFilter.between(baselineStart, now),
+            ))
+            val records = response.records
+            if (records.isEmpty()) return
+            val latest = records.maxByOrNull { it.time }
+            val todayBpm = latest?.beatsPerMinute?.toInt() ?: 0
+            // Baseline = mean of all readings EXCLUDING the latest (so "today vs history")
+            val historyBpms = records
+                .filter { it != latest }
+                .map { it.beatsPerMinute.toInt() }
+            val baseline = if (historyBpms.isNotEmpty()) historyBpms.average().toFloat() else 0f
+            _extras.value = _extras.value.copy(
+                restingHr = todayBpm,
+                restingHrBaseline = baseline,
+            )
+            Log.d(TAG, "Resting HR: today=$todayBpm, baseline=${"%.1f".format(baseline)} (${historyBpms.size} samples)")
+        } catch (e: Exception) {
+            if (isQuotaExceeded(e)) Log.w(TAG, "RestingHR: Quota exceeded")
+            else Log.w(TAG, "RestingHR read failed", e)
+        }
+    }
+
+    private suspend fun readHrv(
+        client: HealthConnectClient,
+        granted: Set<String>,
+        baselineStart: Instant,
+        now: Instant,
+    ) {
+        if (HealthPermission.getReadPermission(HeartRateVariabilityRmssdRecord::class) !in granted) return
+        try {
+            val response = client.readRecords(ReadRecordsRequest(
+                recordType = HeartRateVariabilityRmssdRecord::class,
+                timeRangeFilter = TimeRangeFilter.between(baselineStart, now),
+            ))
+            val records = response.records
+            if (records.isEmpty()) return
+            val latest = records.maxByOrNull { it.time }
+            val todayMs = latest?.heartRateVariabilityMillis?.toFloat() ?: 0f
+            val history = records
+                .filter { it != latest }
+                .map { it.heartRateVariabilityMillis.toFloat() }
+            val baseline = if (history.isNotEmpty()) history.average().toFloat() else 0f
+            _extras.value = _extras.value.copy(
+                hrvRmssd = todayMs,
+                hrvBaseline = baseline,
+            )
+            Log.d(TAG, "HRV: today=${"%.1f".format(todayMs)}ms, baseline=${"%.1f".format(baseline)}ms (${history.size} samples)")
+        } catch (e: Exception) {
+            if (isQuotaExceeded(e)) Log.w(TAG, "HRV: Quota exceeded")
+            else Log.w(TAG, "HRV read failed", e)
+        }
+    }
+
+    /** Reads yesterday's active kcal and computes a 14-day daily mean. */
+    private suspend fun readActiveKcalBaseline(
+        client: HealthConnectClient,
+        granted: Set<String>,
+        baselineStart: Instant,
+        yesterdayStart: Instant,
+        yesterdayEnd: Instant,
+    ) {
+        if (HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class) !in granted) return
+        try {
+            val response = client.readRecords(ReadRecordsRequest(
+                recordType = ActiveCaloriesBurnedRecord::class,
+                timeRangeFilter = TimeRangeFilter.between(baselineStart, yesterdayEnd),
+            ))
+            if (response.records.isEmpty()) return
+            val yesterdayKcal = response.records
+                .filter { it.startTime >= yesterdayStart && it.endTime <= yesterdayEnd }
+                .sumOf { it.energy.inKilocalories }
+                .toFloat()
+            // Daily mean across the baseline window (excluding today so "yesterday vs normal day")
+            val days = BASELINE_DAYS.toFloat().coerceAtLeast(1f)
+            val totalKcal = response.records.sumOf { it.energy.inKilocalories }.toFloat()
+            val dailyMean = totalKcal / days
+            _extras.value = _extras.value.copy(
+                yesterdayActiveKcal = yesterdayKcal,
+                activeKcalBaseline = dailyMean,
+            )
+            Log.d(TAG, "Active kcal: yesterday=${"%.0f".format(yesterdayKcal)}, dailyBaseline=${"%.0f".format(dailyMean)}")
+        } catch (e: Exception) {
+            if (isQuotaExceeded(e)) Log.w(TAG, "Kcal baseline: Quota exceeded")
+            else Log.w(TAG, "Kcal baseline read failed", e)
         }
     }
 
@@ -257,5 +381,7 @@ class HealthExtrasRepository @Inject constructor(
         private const val TAG = "HealthExtrasRepo"
         private const val POLL_INTERVAL_MS = 300_000L
         private const val EXTRA_REQUEST_DELAY_MS = 500L
+        /** Window size for RHR/HRV/kcal baselines. */
+        private const val BASELINE_DAYS = 14L
     }
 }

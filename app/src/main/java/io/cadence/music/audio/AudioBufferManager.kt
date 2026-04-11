@@ -4,6 +4,7 @@ import android.util.Log
 import io.cadence.music.data.api.GenerationRepository
 import io.cadence.music.data.api.GenerationResult
 import io.cadence.music.data.api.SongParams
+import io.cadence.music.data.model.GeneratedSong
 import io.cadence.music.data.model.Scene
 import io.cadence.music.data.model.SensorState
 import io.cadence.music.domain.PromptBuilder
@@ -22,7 +23,7 @@ import javax.inject.Singleton
 
 /**
  * Manages a 2-item buffer of pre-generated audio clips using the two-step
- * generation chain (Gemini Flash-Lite → Gemini Lyria 3).
+ * generation chain (Gemini 3 Flash → Gemini Lyria 3).
  */
 @Singleton
 class AudioBufferManager @Inject constructor(
@@ -50,8 +51,30 @@ class AudioBufferManager @Inject constructor(
     private val _lastError = MutableStateFlow<String?>(null)
     val lastError: StateFlow<String?> = _lastError
 
+    private val _songHistory = MutableStateFlow<List<GeneratedSong>>(emptyList())
+    val songHistory: StateFlow<List<GeneratedSong>> = _songHistory
+
+    private val _playbackProgress = MutableStateFlow(PlaybackProgress())
+    val playbackProgress: StateFlow<PlaybackProgress> = _playbackProgress
+
+    fun updateProgress(positionMs: Long, durationMs: Long) {
+        _playbackProgress.value = PlaybackProgress(positionMs, durationMs)
+    }
+
     init {
         startWorker()
+    }
+
+    private fun recordSong(params: SongParams) {
+        val song = GeneratedSong(
+            id = System.currentTimeMillis(),
+            params = params,
+            scene = currentScene,
+            generatedAt = System.currentTimeMillis(),
+        )
+        _songHistory.update { history ->
+            (listOf(song) + history).take(MAX_HISTORY)
+        }
     }
 
     private fun startWorker() {
@@ -79,6 +102,7 @@ class AudioBufferManager @Inject constructor(
                     return
                 }
                 _currentSongParams.value = result.params
+                recordSong(result.params)
                 queue.send(result.audioFile)
                 _chunksReady.update { it + 1 }
             }
@@ -93,6 +117,7 @@ class AudioBufferManager @Inject constructor(
                             return
                         }
                         _currentSongParams.value = retry.params
+                        recordSong(retry.params)
                         queue.send(retry.audioFile)
                         _chunksReady.update { it + 1 }
                     }
@@ -152,5 +177,6 @@ class AudioBufferManager @Inject constructor(
 
     companion object {
         private const val TAG = "AudioBufferManager"
+        private const val MAX_HISTORY = 50
     }
 }

@@ -99,7 +99,6 @@ dependencies {
     testImplementation(libs.turbine)
 
     // Networking
-    implementation(libs.generative.ai)
     implementation(libs.retrofit)
     implementation(libs.retrofit.moshi)
     implementation(libs.okhttp)

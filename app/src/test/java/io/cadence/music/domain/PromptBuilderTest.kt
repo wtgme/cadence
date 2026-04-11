@@ -20,7 +20,6 @@ class PromptBuilderTest {
         scene: Scene? = null,
         speedKmh: Float = 0f,
         heartRate: Int = 70,
-        energyScore: Int = 50,
         sleepScore: Int = 75,
         stepsToday: Long = 0,
         activityMinutes: Int = 0,
@@ -31,7 +30,6 @@ class PromptBuilderTest {
         SensorState(
             speedKmh = speedKmh,
             heartRate = heartRate,
-            energyScore = energyScore,
             sleepScore = sleepScore,
             stepsToday = stepsToday,
             activityMinutesToday = activityMinutes,
@@ -50,15 +48,6 @@ class PromptBuilderTest {
         assertTrue(build(Scene.STUCK_IN_TRAFFIC).contains("Traffic"))
         assertTrue(build(Scene.RESTING).contains("Resting"))
         assertTrue(build(null).contains("Stationary"))
-    }
-
-    @Test
-    fun `energy score brackets produce correct labels`() {
-        assertTrue(build(energyScore = 80).contains("Very high energy"))
-        assertTrue(build(energyScore = 60).contains("High energy"))
-        assertTrue(build(energyScore = 40).contains("Moderate energy"))
-        assertTrue(build(energyScore = 20).contains("Low energy"))
-        assertTrue(build(energyScore = 10).contains("Very low energy"))
     }
 
     @Test
@@ -96,7 +85,6 @@ class PromptBuilderTest {
             scene = Scene.RUNNING,
             speedKmh = 10f,
             heartRate = 150,
-            energyScore = 80,
             sleepScore = 80,
             stepsToday = 5000,
             activityMinutes = 30,
@@ -107,7 +95,6 @@ class PromptBuilderTest {
         assertTrue(result.contains("GPS Speed:"))
         assertTrue(result.contains("Weather: Rainy"))
         assertTrue(result.contains("HR:"))
-        assertTrue(result.contains("Energy:"))
         assertTrue(result.contains("Sleep:"))
         assertTrue(result.contains("Time:"))
         assertTrue(result.contains("5000 steps"))
