@@ -439,7 +439,7 @@ fun PlayerScreen(viewModel: PlayerViewModel = hiltViewModel()) {
                             val params = songParams
                             if (params != null) {
                                 Text(
-                                    text = "Tags: ${params.tags ?: "none"}",
+                                    text = "Style: ${params.descriptions ?: "none"}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = Color.White.copy(alpha = 0.9f),
                                     fontWeight = FontWeight.SemiBold,
@@ -476,22 +476,12 @@ fun PlayerScreen(viewModel: PlayerViewModel = hiltViewModel()) {
                                     )
                                     Spacer(Modifier.height(4.dp))
                                     Text(
-                                        text = "duration = ${"%.0f".format(params.duration)}s",
+                                        text = "type = ${params.generate_type}",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = Color.White.copy(alpha = 0.7f),
                                     )
                                     Text(
-                                        text = "temperature = ${params.temperature}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = Color.White.copy(alpha = 0.7f),
-                                    )
-                                    Text(
-                                        text = "top_k = ${params.topk}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = Color.White.copy(alpha = 0.7f),
-                                    )
-                                    Text(
-                                        text = "cfg_scale = ${params.cfg_scale}",
+                                        text = "auto_prompt = ${params.auto_prompt_audio_type ?: "none"}",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = Color.White.copy(alpha = 0.7f),
                                     )
@@ -735,7 +725,7 @@ fun GeneratedTrackCard(song: GeneratedSong, modifier: Modifier = Modifier) {
                     maxLines = 2,
                 )
                 Text(
-                    text = song.params.tags ?: "—",
+                    text = song.params.descriptions ?: "—",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White.copy(alpha = 0.9f),
                     fontWeight = FontWeight.SemiBold,
@@ -780,7 +770,7 @@ fun GeneratedTrackCard(song: GeneratedSong, modifier: Modifier = Modifier) {
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = song.params.tags ?: "—",
+                    text = song.params.descriptions ?: "—",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White.copy(alpha = 0.9f),
                 )

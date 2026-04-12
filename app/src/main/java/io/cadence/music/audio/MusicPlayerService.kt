@@ -64,18 +64,36 @@ class MusicPlayerService : MediaSessionService() {
 
         player.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                // Previous song finished — delete its file to free space
+                // Only react to auto-advance (previous chunk finished). Ignore
+                // REASON_PLAYLIST_CHANGED (fires when we append the very first
+                // item and would otherwise remove the currently-playing chunk
+                // from enqueuedFiles, shifting file tracking off-by-one).
+                if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_AUTO &&
+                    reason != Player.MEDIA_ITEM_TRANSITION_REASON_SEEK
+                ) {
+                    Log.d(TAG, "Transition reason=$reason ignored")
+                    return
+                }
                 enqueuedFiles.removeFirstOrNull()?.let { played ->
                     if (played.delete()) Log.d(TAG, "Deleted: ${played.name}")
                 }
-                // Feed the next buffered clip into ExoPlayer immediately
+                Log.d(TAG, "Chunk auto-advanced — pre-fetching next (queued=${enqueuedFiles.size})")
+                // Feed the next buffered chunk into ExoPlayer immediately.
+                // The buffer worker self-triggers new song generation after each
+                // stream completes — no explicit onChunkStarted() needed here.
                 feedNextChunk()
-                // Start generating the one after that right away so it's ready in time
-                bufferManager.onChunkStarted()
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 Log.e(TAG, "ExoPlayer error: ${error.errorCodeName} — ${error.message}")
+                // Don't let one bad clip stall the chain — skip past it and
+                // keep the generation loop alive.
+                if (player.hasNextMediaItem()) {
+                    player.seekToNextMediaItem()
+                    player.prepare()
+                    player.play()
+                }
+                feedNextChunk()
             }
         })
 
@@ -98,7 +116,13 @@ class MusicPlayerService : MediaSessionService() {
         when (intent?.action) {
             ACTION_PLAY -> if (!isPlaying) { isPlaying = true; startFeedLoop(); startPositionUpdates() }
             ACTION_SKIP_NEXT -> skipToNext()
-            ACTION_SKIP_PREV -> player.seekTo(0)
+            ACTION_SKIP_PREV -> {
+                player.seekTo(0)
+                if (player.playbackState == Player.STATE_ENDED) {
+                    player.prepare()
+                    player.play()
+                }
+            }
             ACTION_SEEK -> {
                 val pos = intent.getLongExtra(EXTRA_SEEK_POSITION_MS, 0L)
                 player.seekTo(pos)
@@ -137,7 +161,7 @@ class MusicPlayerService : MediaSessionService() {
         if (player.hasNextMediaItem()) {
             player.seekToNextMediaItem()
         } else {
-            bufferManager.onChunkStarted()
+            feedNextChunk()
         }
     }
 
@@ -152,10 +176,10 @@ class MusicPlayerService : MediaSessionService() {
             player.prepare()
             player.play()
             Log.d(TAG, "Playback started: ${first.name}")
-            // Pre-enqueue the already-buffered second clip for gapless transition
+            // Pre-fetch the next chunk into ExoPlayer's queue while song 1 plays.
+            // The buffer worker self-sustains — it triggers the next song generation
+            // automatically when each stream completes.
             feedNextChunk()
-            // Immediately kick off the third clip so it's ready before the second ends
-            bufferManager.onChunkStarted()
         }
     }
 
@@ -177,7 +201,6 @@ class MusicPlayerService : MediaSessionService() {
             player.seekTo(player.mediaItemCount - 1, 0)
             player.prepare()
             player.play()
-            bufferManager.onChunkStarted()
             feedNextChunk()
             Log.d(TAG, "Resumed after gap: ${file.name}")
         }

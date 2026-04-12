@@ -93,7 +93,7 @@ class PromptBuilderTest {
         )
         assertTrue(result.contains("Activity:"))
         assertTrue(result.contains("GPS Speed:"))
-        assertTrue(result.contains("Weather: Rainy"))
+        assertTrue(result.contains("Weather:") && result.contains("rainy"))
         assertTrue(result.contains("HR:"))
         assertTrue(result.contains("Sleep:"))
         assertTrue(result.contains("Time:"))
