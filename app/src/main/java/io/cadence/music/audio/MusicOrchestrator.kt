@@ -118,16 +118,17 @@ class MusicOrchestrator @Inject constructor(
 
         bufferJob?.cancel()
         bufferJob = scope.launch {
-            // Refresh biometrics and environment before priming so Gemma
-            // receives the latest sensor data, not values from a previous session.
+            // Refresh biometrics before priming so generation uses the latest sensor data.
             Log.d(TAG, "startPlayback: refreshing biometrics before generation")
             sensorStateCollector.refreshAll()
 
             lastGeneratedHr = _currentSensorState.value.heartRate
             bufferManager.prime(_currentSensorState.value, _currentScene.value)
 
+            // Wait for first chunk (~18 s with streaming) then start playback immediately.
+            // The buffer worker self-sustains — no explicit song 2 kick-off needed.
             bufferManager.chunksReady.first { it >= 1 }
-            Log.d(TAG, "Buffer primed — signalling playback start")
+            Log.d(TAG, "First chunk ready — starting playback")
             _playbackState.value = PlaybackState.PLAYING
             context.startService(Intent(context, MusicPlayerService::class.java).apply {
                 action = MusicPlayerService.ACTION_PLAY

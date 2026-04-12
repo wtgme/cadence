@@ -23,8 +23,7 @@ android {
         versionName = "0.2.0"
 
         buildConfigField("String", "SONGGEN_BASE_URL", "\"${localProps.getProperty("songgen.base.url", "http://82.10.52.198:8000")}\"")
-        buildConfigField("String", "GEMMA_BASE_URL", "\"${localProps.getProperty("gemma.base.url", "http://82.10.52.198:8001")}\"")
-        buildConfigField("String", "GEMINI_API_KEY", "\"${localProps.getProperty("gemini.api.key", "")}\"")
+        buildConfigField("String", "OPENROUTER_API_KEY", "\"${localProps.getProperty("openrouter.api.key", "")}\"")
     }
 
     buildTypes {
@@ -56,6 +55,10 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+    }
+
+    testOptions {
+        unitTests.isReturnDefaultValues = true
     }
 }
 

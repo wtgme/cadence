@@ -2,17 +2,19 @@ package io.cadence.music.audio
 
 import android.util.Log
 import io.cadence.music.data.api.GenerationRepository
-import io.cadence.music.data.api.GenerationResult
 import io.cadence.music.data.api.SongParams
+import io.cadence.music.data.api.StreamingChunk
 import io.cadence.music.data.model.GeneratedSong
 import io.cadence.music.data.model.Scene
 import io.cadence.music.data.model.SensorState
+import io.cadence.music.domain.ParamsBuilder
 import io.cadence.music.domain.PromptBuilder
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -22,22 +24,46 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Manages a 2-item buffer of pre-generated audio clips using the two-step
- * generation chain (Gemini 3 Flash → Gemini Lyria 3).
+ * Manages a pre-generated buffer of audio files.
+ *
+ * Each song request calls [GenerationRepository.generateAudioStream], which emits a
+ * single [StreamingChunk.Audio] (one complete MP3) followed by [StreamingChunk.Complete].
+ * The interface is designed for future streaming backends that may emit multiple chunks.
+ *
+ * After each song completes the worker automatically triggers the next request,
+ * creating a self-sustaining loop that keeps the queue ahead of playback.
+ *
+ * Context changes (scene shift, HR drift) call [drainAndReprime], which cancels the
+ * in-flight request, flushes stale chunks, and restarts — reusing the session [SongParams].
+ * Only [prime] (called on explicit start) clears the cached params to re-query OpenRouter.
  */
 @Singleton
 class AudioBufferManager @Inject constructor(
     private val musicRepository: GenerationRepository,
+    private val paramsBuilder: ParamsBuilder,
     private val promptBuilder: PromptBuilder,
 ) {
-    private val queue = Channel<File>(capacity = 2)
+    // Holds pre-generated chunk files ready for ExoPlayer. Sized to buffer ~2 full songs
+    // (each 90 s song produces ~3 chunks).
+    private val queue = Channel<File>(capacity = 8)
     private val requestChannel = Channel<Unit>(capacity = Channel.UNLIMITED)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    private var currentSensorState: SensorState = SensorState()
-    private var currentScene: Scene? = null
+    @Volatile private var currentSensorState: SensorState = SensorState()
+    @Volatile private var currentScene: Scene? = null
 
     @Volatile private var generationEpoch = 0L
+
+    /**
+     * Params fetched from OpenRouter at the start of a session.
+     * Set to null by [prime] so the next generation re-queries OpenRouter.
+     * NOT cleared by [drainAndReprime] — context shifts mid-session reuse the
+     * same style rather than burning another OpenRouter call.
+     */
+    @Volatile private var sessionParams: SongParams? = null
+
+    /** Job for the currently active streaming request — cancelled by [drainAndReprime]. */
+    @Volatile private var activeStreamingJob: Job? = null
 
     private val _chunksReady = MutableStateFlow(0)
     val chunksReady: StateFlow<Int> = _chunksReady
@@ -65,101 +91,140 @@ class AudioBufferManager @Inject constructor(
         startWorker()
     }
 
-    private fun recordSong(params: SongParams) {
-        val song = GeneratedSong(
-            id = System.currentTimeMillis(),
-            params = params,
-            scene = currentScene,
-            generatedAt = System.currentTimeMillis(),
-        )
-        _songHistory.update { history ->
-            (listOf(song) + history).take(MAX_HISTORY)
-        }
-    }
-
     private fun startWorker() {
         scope.launch {
+            Log.d(TAG, "Worker: started, waiting for requests")
             for (request in requestChannel) {
-                processNextRequest()
-                delay(1000) // Small breather between consecutive generations
+                Log.d(TAG, "Worker: request picked up, epoch=$generationEpoch")
+                val job = launch {
+                    try {
+                        processNextRequest()
+                    } catch (e: CancellationException) {
+                        Log.d(TAG, "Worker: streaming job cancelled (epoch=$generationEpoch)")
+                        throw e
+                    } catch (e: Throwable) {
+                        Log.e(TAG, "Worker: unexpected exception — keeping loop alive", e)
+                        _lastError.value = e.message ?: "generation error"
+                    }
+                }
+                activeStreamingJob = job
+                job.join()
+                Log.d(TAG, "Worker: job done, back to idle")
             }
+            Log.w(TAG, "Worker loop exited — requestChannel closed")
         }
     }
 
     private suspend fun processNextRequest() {
+        val myEpoch = generationEpoch
         val state = currentSensorState
         val scene = currentScene
-        val myEpoch = generationEpoch
-        
-        val metricsContext = promptBuilder.buildMetricsContext(state, scene)
-        _currentMetricsContext.value = metricsContext
-        
-        val result = musicRepository.generateClip(metricsContext)
-        when (result) {
-            is GenerationResult.Success -> {
-                if (myEpoch != generationEpoch) {
-                    result.audioFile.delete()
-                    return
-                }
-                _currentSongParams.value = result.params
-                recordSong(result.params)
-                queue.send(result.audioFile)
-                _chunksReady.update { it + 1 }
-            }
-            is GenerationResult.Error -> {
-                Log.w(TAG, "Generation failed: ${result.message}, retrying once")
-                delay(2000) // Longer delay before retry
-                val retry = musicRepository.generateClip(metricsContext)
-                when (retry) {
-                    is GenerationResult.Success -> {
-                        if (myEpoch != generationEpoch) {
-                            retry.audioFile.delete()
-                            return
-                        }
-                        _currentSongParams.value = retry.params
-                        recordSong(retry.params)
-                        queue.send(retry.audioFile)
-                        _chunksReady.update { it + 1 }
+
+        // Build metrics context for the Debug screen (instant — no network)
+        _currentMetricsContext.value = promptBuilder.buildMetricsContext(state, scene)
+
+        // Fetch params from OpenRouter on the first song of a session; reuse for
+        // all subsequent songs. sessionParams is cleared by prime() on stop+start.
+        val params = sessionParams ?: paramsBuilder.buildParams(state, scene).also {
+            sessionParams = it
+            Log.d(TAG, "Worker: OpenRouter params fetched — descriptions=${it.descriptions} type=${it.auto_prompt_audio_type}")
+        }
+        _currentSongParams.value = params
+        Log.d(TAG, "Worker: params ready — descriptions=${params.descriptions} type=${params.auto_prompt_audio_type} epoch=$myEpoch")
+
+        if (myEpoch != generationEpoch) {
+            Log.d(TAG, "Worker: epoch changed before streaming — discarding")
+            return
+        }
+
+        var firstChunk = true
+        musicRepository.generateAudioStream(params).collect { chunk ->
+            when (chunk) {
+                is StreamingChunk.Audio -> {
+                    if (myEpoch != generationEpoch) {
+                        chunk.file.delete()
+                        Log.d(TAG, "Worker: stale chunk discarded (epoch mismatch)")
+                        return@collect
                     }
-                    is GenerationResult.Error -> {
-                        Log.e(TAG, "Retry failed: ${retry.message}")
-                        if (myEpoch == generationEpoch) _lastError.value = retry.message
+                    if (firstChunk) {
+                        firstChunk = false
+                        recordSong(params)
+                    }
+                    Log.d(TAG, "Worker: queuing chunk ${chunk.index} (${chunk.file.name})")
+                    queue.send(chunk.file)
+                    _chunksReady.update { it + 1 }
+                }
+                is StreamingChunk.Error -> {
+                    Log.e(TAG, "Worker: stream error — ${chunk.message}")
+                    if (myEpoch == generationEpoch) _lastError.value = chunk.message
+                }
+                StreamingChunk.Complete -> {
+                    Log.d(TAG, "Worker: stream complete — auto-triggering next song")
+                    // Self-sustaining: immediately queue the next song request unless
+                    // context has changed (epoch mismatch means drainAndReprime already
+                    // sent a new request).
+                    if (myEpoch == generationEpoch) {
+                        requestChannel.trySend(Unit)
                     }
                 }
             }
         }
     }
 
+    private fun recordSong(params: SongParams) {
+        val song = GeneratedSong(
+            id          = System.currentTimeMillis(),
+            params      = params,
+            scene       = currentScene,
+            generatedAt = System.currentTimeMillis(),
+        )
+        _songHistory.update { history -> (listOf(song) + history).take(MAX_HISTORY) }
+    }
+
+    /**
+     * Start a new playback session. Clears cached [SongParams] so the next generation
+     * re-queries OpenRouter with fresh biometrics. Does NOT bump the epoch.
+     */
     fun prime(sensorState: SensorState, scene: Scene?) {
-        currentSensorState = sensorState
-        currentScene = scene
-        _chunksReady.value = 0
-        repeat(2) { requestChannel.trySend(Unit) }
+        sessionParams = null     // force OpenRouter re-query for this new session
+        _currentMetricsContext.value = ""
+        _currentSongParams.value = null
+        enqueueGeneration(sensorState, scene)
     }
 
-    fun onChunkStarted() {
-        requestChannel.trySend(Unit)
-    }
-
-    suspend fun takeNext(): File? = try {
-        queue.receive()
-    } catch (e: kotlinx.coroutines.CancellationException) {
-        throw e
-    } catch (e: Exception) {
-        Log.e(TAG, "takeNext failed", e)
-        null
-    }
-
+    /**
+     * Cancel any in-flight generation, flush all queued chunks, and restart with new
+     * context. Bumps the epoch so stale results are discarded.
+     *
+     * Does NOT clear [sessionParams] — mid-session context shifts (HR drift, scene change)
+     * reuse the style established at session start rather than burning another OpenRouter call.
+     */
     fun drainAndReprime(sensorState: SensorState, scene: Scene?) {
-        generationEpoch++  // Invalidate all in-flight generation coroutines
+        activeStreamingJob?.cancel()
+        generationEpoch++
         while (true) {
             val polled = queue.tryReceive()
             if (polled.isFailure) break
             polled.getOrNull()?.delete()
         }
-        _chunksReady.value = 0
         _lastError.value = null
-        prime(sensorState, scene)
+        enqueueGeneration(sensorState, scene)
+    }
+
+    private fun enqueueGeneration(sensorState: SensorState, scene: Scene?) {
+        currentSensorState = sensorState
+        currentScene = scene
+        _chunksReady.value = 0
+        requestChannel.trySend(Unit)
+    }
+
+    suspend fun takeNext(): File? = try {
+        queue.receive()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Log.e(TAG, "takeNext failed", e)
+        null
     }
 
     fun retryGeneration() {

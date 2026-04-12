@@ -59,6 +59,8 @@ class SensorStateCollector @Inject constructor(
             speedKmh = location.speedKmh,
             heartRate = heartRate,
             hourOfDay = Calendar.getInstance().get(Calendar.HOUR_OF_DAY),
+            minuteOfHour = Calendar.getInstance().get(Calendar.MINUTE),
+            dayOfWeek = Calendar.getInstance().get(Calendar.DAY_OF_WEEK),
             weather = weather,
             latitude = location.latitude,
             longitude = location.longitude,

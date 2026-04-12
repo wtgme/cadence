@@ -4,6 +4,8 @@ data class SensorState(
     val speedKmh: Float = 0f,
     val heartRate: Int = 0,
     val hourOfDay: Int = 0,
+    val minuteOfHour: Int = 0,
+    val dayOfWeek: Int = 1,   // Calendar.DAY_OF_WEEK: 1=Sunday … 7=Saturday
     val weather: String = "Clear",
     val latitude: Double = 0.0,
     val longitude: Double = 0.0,
