@@ -239,6 +239,34 @@ class AudioBufferManager @Inject constructor(
         requestChannel.trySend(Unit)
     }
 
+    /**
+     * Called by [MusicPlayerService] when the user requested skip but no buffered song was
+     * available. Resets [chunksReady] to 0 so the UI immediately shows the buffering state
+     * rather than appearing stuck on the previous song.
+     */
+    fun notifySkipToNext() {
+        _chunksReady.value = 0
+    }
+
+    /**
+     * Cancels any in-flight generation request and flushes the queue.
+     * Called when the user stops playback so the server request is aborted immediately
+     * rather than running to completion in the background.
+     */
+    fun cancelGeneration() {
+        activeStreamingJob?.cancel()
+        generationEpoch++
+        while (true) {
+            val polled = queue.tryReceive()
+            if (polled.isFailure) break
+            polled.getOrNull()?.delete()
+        }
+        _chunksReady.value = 0
+        _lastError.value = null
+        sessionParams = null
+        Log.d(TAG, "Generation cancelled (epoch=$generationEpoch)")
+    }
+
     fun updateSensorState(state: SensorState) {
         currentSensorState = state
     }

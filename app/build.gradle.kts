@@ -96,6 +96,9 @@ dependencies {
     // Health Connect
     implementation(libs.health.connect)
 
+    // Taste memory persistence
+    implementation(libs.datastore.preferences)
+
     // Testing
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

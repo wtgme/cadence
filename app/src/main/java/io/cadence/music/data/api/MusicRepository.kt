@@ -4,6 +4,7 @@ import android.util.Log
 import com.squareup.moshi.Moshi
 import io.cadence.music.BuildConfig
 import io.cadence.music.data.model.MentalState
+import io.cadence.music.data.taste.TasteMemoryRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -34,6 +35,7 @@ class MusicRepository @Inject constructor(
     private val okHttpClient: OkHttpClient,
     private val moshi: Moshi,
     private val backend: GenerationBackend,
+    private val tasteMemory: TasteMemoryRepository,
 ) : GenerationRepository {
 
     private val openRouterClient = okHttpClient.newBuilder()
@@ -117,10 +119,18 @@ class MusicRepository @Inject constructor(
         Log.d(TAG, "Step 1b: translating mental state to song params")
         logChunked("Step 1b user", mentalStateJson)
 
+        val tasteContext = tasteMemory.buildTasteContext()
+        val userMessage = buildString {
+            append("User's current mental state:\n$mentalStateJson")
+            if (tasteContext.isNotEmpty()) {
+                append("\n\n$tasteContext")
+            }
+        }
+
         val rawText = callOpenRouter(
             apiKey = apiKey,
             systemPrompt = SONG_PARAMS_FROM_MENTAL_STATE_SYSTEM,
-            userMessage = "User's current mental state:\n$mentalStateJson",
+            userMessage = userMessage,
             label = "Step 1b",
         ) ?: return null
 

@@ -159,9 +159,21 @@ class MusicPlayerService : MediaSessionService() {
 
     private fun skipToNext() {
         if (player.hasNextMediaItem()) {
+            // Song already pre-loaded in ExoPlayer — instant skip
             player.seekToNextMediaItem()
         } else {
-            feedNextChunk()
+            // Next song is still being generated. Stop the current song immediately
+            // so the user sees something happen, then let the already-running
+            // feedNextChunk() coroutine deliver the next song when ready.
+            // enqueueFile() handles STATE_IDLE and will auto-resume + pre-fetch.
+            enqueuedFiles.forEach { it.delete() }
+            enqueuedFiles.clear()
+            player.clearMediaItems()
+            player.stop()
+            bufferManager.notifySkipToNext()
+            // Do NOT call feedNextChunk() here — one is already pending from
+            // startFeedLoop() or onMediaItemTransition. Adding another creates a
+            // second competing consumer that consumes songs out of order.
         }
     }
 
@@ -172,14 +184,9 @@ class MusicPlayerService : MediaSessionService() {
                 Log.w(TAG, "Buffer returned null — no audio to play")
                 return@launch
             }
+            // enqueueFile() detects STATE_IDLE and handles prepare/play/feedNextChunk
             enqueueFile(first)
-            player.prepare()
-            player.play()
-            Log.d(TAG, "Playback started: ${first.name}")
-            // Pre-fetch the next chunk into ExoPlayer's queue while song 1 plays.
-            // The buffer worker self-sustains — it triggers the next song generation
-            // automatically when each stream completes.
-            feedNextChunk()
+            Log.d(TAG, "Feed loop started: ${first.name}")
         }
     }
 
@@ -192,12 +199,14 @@ class MusicPlayerService : MediaSessionService() {
 
     private fun enqueueFile(file: File) {
         val item = MediaItem.fromUri(Uri.fromFile(file))
-        val wasEnded = player.playbackState == Player.STATE_ENDED
+        // Resume when: playlist ran dry naturally (ENDED) OR player was stopped by a
+        // skip-while-generating call (IDLE after clearMediaItems + stop).
+        val needsResume = player.playbackState == Player.STATE_ENDED ||
+                          player.playbackState == Player.STATE_IDLE
         player.addMediaItem(item)
         enqueuedFiles.addLast(file)
         Log.d(TAG, "Queued: ${file.name}")
-        if (wasEnded) {
-            // Playlist ran dry before this clip was ready — seek to it and resume.
+        if (needsResume) {
             player.seekTo(player.mediaItemCount - 1, 0)
             player.prepare()
             player.play()

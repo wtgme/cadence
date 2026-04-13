@@ -9,6 +9,8 @@ import io.cadence.music.data.model.GeneratedSong
 import io.cadence.music.data.model.MentalState
 import io.cadence.music.data.model.Scene
 import io.cadence.music.data.model.SensorState
+import io.cadence.music.data.model.UserTasteMemory
+import io.cadence.music.data.taste.TasteMemoryRepository
 import io.cadence.music.data.sensor.LocationService
 import io.cadence.music.data.sensor.SensorStateCollector
 import io.cadence.music.domain.SceneDetector
@@ -35,6 +37,7 @@ class MusicOrchestrator @Inject constructor(
     private val sceneDetector: SceneDetector,
     private val sceneStateMachine: SceneStateMachine,
     private val bufferManager: AudioBufferManager,
+    private val tasteMemoryRepository: TasteMemoryRepository,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
@@ -127,14 +130,26 @@ class MusicOrchestrator @Inject constructor(
             lastGeneratedHr = _currentSensorState.value.heartRate
             bufferManager.prime(_currentSensorState.value, _currentScene.value)
 
-            // Wait for first chunk (~18 s with streaming) then start playback immediately.
-            // The buffer worker self-sustains — no explicit song 2 kick-off needed.
+            // Wait for first chunk then start playback.
             bufferManager.chunksReady.first { it >= 1 }
             Log.d(TAG, "First chunk ready — starting playback")
             _playbackState.value = PlaybackState.PLAYING
             context.startService(Intent(context, MusicPlayerService::class.java).apply {
                 action = MusicPlayerService.ACTION_PLAY
             })
+
+            // Keep playback state in sync for the rest of the session.
+            // chunksReady drops to 0 when: user skips while generating (notifySkipToNext),
+            // or a context reprime is triggered (drainAndReprime). Both should show BUFFERING.
+            bufferManager.chunksReady.collect { count ->
+                if (!playbackStarted) return@collect
+                when {
+                    count == 0 && _playbackState.value == PlaybackState.PLAYING ->
+                        _playbackState.value = PlaybackState.BUFFERING
+                    count > 0 && _playbackState.value == PlaybackState.BUFFERING ->
+                        _playbackState.value = PlaybackState.PLAYING
+                }
+            }
         }
     }
 
@@ -147,6 +162,8 @@ class MusicOrchestrator @Inject constructor(
         detectionJob = null
         sceneJob?.cancel()
         sceneJob = null
+        // Cancel any in-flight generation so the server request is aborted immediately
+        bufferManager.cancelGeneration()
         sensorStateCollector.stop()
         context.stopService(Intent(context, LocationService::class.java))
         context.stopService(Intent(context, MusicPlayerService::class.java))
@@ -193,6 +210,39 @@ class MusicOrchestrator @Inject constructor(
 
     suspend fun checkHealthPermissions() {
         _hasHealthPermissions.value = sensorStateCollector.hasHeartRatePermission()
+    }
+
+    // ── Taste memory ──────────────────────────────────────────────────────────
+
+    /** Live taste profile exposed to the UI for display / settings. */
+    val tasteMemory: StateFlow<UserTasteMemory> = tasteMemoryRepository.tasteMemory
+
+    /**
+     * Records the outcome of a song as a taste feedback signal.
+     *
+     * [listenFraction] is the fraction of the song duration the user heard (0..1):
+     *   ≥ 0.90 → +1.0 (completed)
+     *   0.50–0.89 → +0.5 (good partial listen)
+     *   0.10–0.49 → -0.5 (skipped mid-song)
+     *   < 0.10 → -1.0 (skipped immediately)
+     *
+     * Call this from the UI after a skip or natural song completion.
+     */
+    fun recordListenResult(params: SongParams, listenFraction: Float) {
+        val signal = when {
+            listenFraction >= 0.90f -> 1.0f
+            listenFraction >= 0.50f -> 0.5f
+            listenFraction >= 0.10f -> -0.5f
+            else                    -> -1.0f
+        }
+        scope.launch {
+            tasteMemoryRepository.recordFeedback(params, _currentScene.value, signal)
+        }
+    }
+
+    /** Wipes all accumulated taste data. */
+    fun resetTasteMemory() {
+        scope.launch { tasteMemoryRepository.reset() }
     }
 
     companion object {
