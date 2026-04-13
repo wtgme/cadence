@@ -6,18 +6,26 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 private val DarkColors = darkColorScheme(
-    primary = Color(0xFF4CAF50),
-    onPrimary = Color.Black,
-    background = Color(0xFF0A0A0A),
-    surface = Color(0xFF1A1A1A),
-    onBackground = Color.White,
-    onSurface = Color.White,
+    primary          = GlowDefault,
+    onPrimary        = Color.Black,
+    primaryContainer = Color(0xFF1A2E1A),
+    secondary        = GlowResting,
+    onSecondary      = Color.Black,
+    background       = Surface0,
+    surface          = Surface1,
+    surfaceVariant   = Surface2,
+    onBackground     = TextPrimary,
+    onSurface        = TextPrimary,
+    onSurfaceVariant = TextSecondary,
+    outline          = SurfaceBorder,
+    error            = ErrorRed,
 )
 
 @Composable
 fun CadenceTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = DarkColors,
-        content = content,
+        typography  = CadenceTypography,
+        content     = content,
     )
 }

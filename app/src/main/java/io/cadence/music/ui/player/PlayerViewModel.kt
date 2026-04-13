@@ -11,6 +11,7 @@ import io.cadence.music.data.model.GeneratedSong
 import io.cadence.music.data.model.MentalState
 import io.cadence.music.data.model.Scene
 import io.cadence.music.data.model.SensorState
+import io.cadence.music.data.model.UserTasteMemory
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -57,6 +58,9 @@ class PlayerViewModel @Inject constructor(
     val playbackProgress: StateFlow<PlaybackProgress> = orchestrator.playbackProgress
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PlaybackProgress())
 
+    val tasteMemory: StateFlow<UserTasteMemory> = orchestrator.tasteMemory
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UserTasteMemory())
+
     private val _isRefreshingBiometrics = MutableStateFlow(false)
     val isRefreshingBiometrics: StateFlow<Boolean> = _isRefreshingBiometrics.asStateFlow()
 
@@ -81,7 +85,32 @@ class PlayerViewModel @Inject constructor(
 
     fun retryGeneration() = orchestrator.retryGeneration()
 
-    fun skipToNext() = orchestrator.skipToNext()
+    /** Explicit thumbs-up: records as a full positive listen signal. */
+    fun thumbsUp() {
+        val params = currentSongParams.value ?: return
+        orchestrator.recordListenResult(params, 1.0f)
+    }
+
+    /** Explicit thumbs-down: records as a strong skip signal. */
+    fun thumbsDown() {
+        val params = currentSongParams.value ?: return
+        orchestrator.recordListenResult(params, 0.0f)
+    }
+
+    fun resetTasteMemory() = orchestrator.resetTasteMemory()
+
+    fun skipToNext() {
+        // Auto-record how much of the current song was heard before skipping
+        val params = currentSongParams.value
+        if (params != null) {
+            val progress = playbackProgress.value
+            if (progress.durationMs > 0L) {
+                val fraction = progress.positionMs.toFloat() / progress.durationMs
+                orchestrator.recordListenResult(params, fraction)
+            }
+        }
+        orchestrator.skipToNext()
+    }
 
     fun skipToPrevious() = orchestrator.skipToPrevious()
 

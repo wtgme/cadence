@@ -4,18 +4,34 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.core.content.ContextCompat
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -28,13 +44,15 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
@@ -51,9 +69,17 @@ import androidx.health.connect.client.records.RestingHeartRateRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
+import io.cadence.music.ui.theme.GlowDefault
+import io.cadence.music.ui.theme.Surface0
+import io.cadence.music.ui.theme.Surface1
+import io.cadence.music.ui.theme.Surface2
+import io.cadence.music.ui.theme.TextPrimary
+import io.cadence.music.ui.theme.TextSecondary
+import io.cadence.music.ui.theme.TextTertiary
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private val HEALTH_CONNECT_PERMISSIONS = setOf(
+internal val HEALTH_CONNECT_PERMISSIONS = setOf(
     HealthPermission.getReadPermission(HeartRateRecord::class),
     HealthPermission.getReadPermission(StepsRecord::class),
     HealthPermission.getReadPermission(SleepSessionRecord::class),
@@ -72,37 +98,41 @@ private val HEALTH_CONNECT_PERMISSIONS = setOf(
 @Composable
 fun PermissionsScreen(onAllGranted: () -> Unit) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
+    val scope   = rememberCoroutineScope()
 
-    var locationGranted by remember { mutableStateOf(false) }
-    var healthGranted by remember { mutableStateOf(false) }
-    var notificationsGranted by remember { mutableStateOf(Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) }
+    var locationGranted      by remember { mutableStateOf(false) }
+    var healthGranted        by remember { mutableStateOf(false) }
+    var notificationsGranted by remember {
+        mutableStateOf(Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU)
+    }
 
-    val mainGradient = Brush.verticalGradient(
-        colors = listOf(
-            Color(0xFF1A1A1A),
-            Color(0xFF0A0A0A),
-            Color(0xFF050505)
-        )
-    )
+    // Stagger reveal animation
+    var showBranding by remember { mutableStateOf(false) }
+    var showItems    by remember { mutableStateOf(false) }
+    var showCta      by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        // Check current location permission state (fine or coarse both suffice)
-        val fineGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        // Check current permission state
+        val fineGranted   = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)   == PackageManager.PERMISSION_GRANTED
         val coarseGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
         locationGranted = fineGranted || coarseGranted
 
-        // Check notification permission state
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             notificationsGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
         }
 
-        // Check health connect permissions
         if (HealthConnectClient.getSdkStatus(context) == HealthConnectClient.SDK_AVAILABLE) {
-            val client = HealthConnectClient.getOrCreate(context)
+            val client  = HealthConnectClient.getOrCreate(context)
             val granted = client.permissionController.getGrantedPermissions()
             healthGranted = HEALTH_CONNECT_PERMISSIONS.all { it in granted }
         }
+
+        // Stagger
+        showBranding = true
+        delay(200)
+        showItems = true
+        delay(300)
+        showCta = true
     }
 
     val locationLauncher = rememberLauncherForActivityResult(
@@ -118,7 +148,7 @@ fun PermissionsScreen(onAllGranted: () -> Unit) {
     ) { _ ->
         scope.launch {
             if (HealthConnectClient.getSdkStatus(context) == HealthConnectClient.SDK_AVAILABLE) {
-                val client = HealthConnectClient.getOrCreate(context)
+                val client  = HealthConnectClient.getOrCreate(context)
                 val granted = client.permissionController.getGrantedPermissions()
                 healthGranted = HEALTH_CONNECT_PERMISSIONS.all { it in granted }
             }
@@ -133,131 +163,253 @@ fun PermissionsScreen(onAllGranted: () -> Unit) {
         if (locationGranted && healthGranted && notificationsGranted) onAllGranted()
     }
 
+    val bg = Brush.verticalGradient(listOf(Surface0, Color(0xFF080814), Surface0))
+
     Surface(modifier = Modifier.fillMaxSize(), color = Color.Transparent) {
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(mainGradient)
-                .padding(32.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally,
+                .background(bg),
         ) {
-            Text(
-                text = "CADENCE",
-                style = MaterialTheme.typography.labelLarge,
-                color = Color(0xFF4CAF50),
-                letterSpacing = 4.sp,
-                fontWeight = FontWeight.Bold
-            )
-            
-            Spacer(Modifier.height(48.dp))
-
-            Text(
-                text = "Personalize Your Soundscape",
-                style = MaterialTheme.typography.headlineSmall,
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
-            )
-            
-            Spacer(Modifier.height(16.dp))
-
-            Text(
-                text = "Cadence reads your real-time health metrics to synthesize music that adapts to your physiological state.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.7f),
-                textAlign = TextAlign.Center,
-                lineHeight = 22.sp
-            )
-            
-            Spacer(Modifier.height(48.dp))
-
-            PermissionButton(
-                text = if (locationGranted) "Location Access Granted" else "Grant Location Access",
-                isGranted = locationGranted,
-                onClick = {
-                    locationLauncher.launch(
-                        arrayOf(
-                            Manifest.permission.ACCESS_FINE_LOCATION,
-                            Manifest.permission.ACCESS_COARSE_LOCATION,
-                        )
-                    )
-                }
-            )
-
-            Spacer(Modifier.height(12.dp))
-
-            PermissionButton(
-                text = if (healthGranted) "Health Data Granted" else "Grant Health Data Access",
-                isGranted = healthGranted,
-                onClick = { healthLauncher.launch(HEALTH_CONNECT_PERMISSIONS) }
-            )
-            
-            Text(
-                text = "Connects to heart rate, steps, and sleep data.",
-                style = MaterialTheme.typography.labelSmall,
-                color = Color.White.copy(alpha = 0.4f),
-                modifier = Modifier.padding(top = 4.dp),
-            )
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                Spacer(Modifier.height(12.dp))
-                PermissionButton(
-                    text = if (notificationsGranted) "Notifications Granted" else "Grant Notifications",
-                    isGranted = notificationsGranted,
-                    onClick = { notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }
-                )
-            }
-
-            Spacer(Modifier.height(48.dp))
-
-            Button(
-                onClick = { onAllGranted() },
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF4CAF50),
-                    disabledContainerColor = Color(0xFF4CAF50).copy(alpha = 0.3f)
-                ),
-                enabled = locationGranted,
+                    .fillMaxSize()
+                    .padding(horizontal = 28.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text("Continue", fontWeight = FontWeight.Bold)
-            }
 
-            if (!healthGranted) {
-                Spacer(Modifier.height(16.dp))
-                Text(
-                    text = "Health data is optional but enhances the adaptive experience.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.3f),
-                    textAlign = TextAlign.Center,
-                )
+                // ── Branding ──────────────────────────────────────────────
+                AnimatedVisibility(
+                    visible = showBranding,
+                    enter = fadeIn(tween(500)) + slideInVertically(tween(500)) { -30 },
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        // Logo mark
+                        Box(
+                            modifier = Modifier
+                                .size(72.dp)
+                                .clip(CircleShape)
+                                .background(GlowDefault.copy(alpha = 0.15f))
+                                .border(1.dp, GlowDefault.copy(alpha = 0.4f), CircleShape),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Favorite,
+                                contentDescription = null,
+                                tint = GlowDefault,
+                                modifier = Modifier.size(32.dp),
+                            )
+                        }
+
+                        Spacer(Modifier.height(20.dp))
+
+                        Text(
+                            text = "CADENCE",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = GlowDefault,
+                        )
+
+                        Spacer(Modifier.height(12.dp))
+
+                        Text(
+                            text = "Music that moves\nwith you",
+                            style = MaterialTheme.typography.headlineLarge,
+                            color = TextPrimary,
+                            textAlign = TextAlign.Center,
+                        )
+
+                        Spacer(Modifier.height(12.dp))
+
+                        Text(
+                            text = "Cadence reads your biometrics and environment to generate music that adapts to your physiological state in real time.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextSecondary,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(40.dp))
+
+                // ── Permission items ─────────────────────────────────────
+                AnimatedVisibility(
+                    visible = showItems,
+                    enter = fadeIn(tween(500)) + slideInVertically(tween(500)) { 40 },
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        PermissionFeatureItem(
+                            icon        = Icons.Default.LocationOn,
+                            title       = "Location",
+                            description = "Detects your speed and activity context.",
+                            isGranted   = locationGranted,
+                            onClick     = {
+                                locationLauncher.launch(
+                                    arrayOf(
+                                        Manifest.permission.ACCESS_FINE_LOCATION,
+                                        Manifest.permission.ACCESS_COARSE_LOCATION,
+                                    )
+                                )
+                            },
+                        )
+
+                        PermissionFeatureItem(
+                            icon        = Icons.Default.Favorite,
+                            title       = "Health Data",
+                            description = "Heart rate, steps, sleep and readiness.",
+                            isGranted   = healthGranted,
+                            onClick     = { healthLauncher.launch(HEALTH_CONNECT_PERMISSIONS) },
+                        )
+
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            PermissionFeatureItem(
+                                icon        = Icons.Default.Notifications,
+                                title       = "Notifications",
+                                description = "Background playback controls.",
+                                isGranted   = notificationsGranted,
+                                onClick     = {
+                                    notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                },
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(40.dp))
+
+                // ── CTA ───────────────────────────────────────────────────
+                AnimatedVisibility(
+                    visible = showCta,
+                    enter = fadeIn(tween(500)) + slideInVertically(tween(500)) { 40 },
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Button(
+                            onClick = onAllGranted,
+                            enabled = locationGranted,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor         = GlowDefault,
+                                disabledContainerColor = GlowDefault.copy(alpha = 0.25f),
+                                contentColor           = Color.Black,
+                                disabledContentColor   = Color.Black.copy(alpha = 0.4f),
+                            ),
+                        ) {
+                            Text(
+                                text       = if (locationGranted) "Start Listening" else "Grant Location to Continue",
+                                style      = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+
+                        if (!healthGranted) {
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                text  = "Health access is optional but improves personalisation.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = TextTertiary,
+                                textAlign = TextAlign.Center,
+                            )
+                        }
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun PermissionButton(
-    text: String,
+private fun PermissionFeatureItem(
+    icon: ImageVector,
+    title: String,
+    description: String,
     isGranted: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
 ) {
-    Button(
-        onClick = onClick,
+    val borderColor = if (isGranted) GlowDefault.copy(alpha = 0.4f) else Color.White.copy(alpha = 0.08f)
+    val bgColor     = if (isGranted) GlowDefault.copy(alpha = 0.07f) else Surface1
+
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(56.dp),
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = if (isGranted) Color.White.copy(alpha = 0.1f) else Color(0xFF1A1A1A),
-            contentColor = if (isGranted) Color(0xFF4CAF50) else Color.White
-        ),
-        border = if (isGranted) androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF4CAF50).copy(alpha = 0.3f)) else null,
-        enabled = !isGranted,
+            .clip(RoundedCornerShape(16.dp))
+            .background(bgColor)
+            .border(1.dp, borderColor, RoundedCornerShape(16.dp))
+            .then(
+                if (!isGranted) Modifier.padding(0.dp) else Modifier
+            )
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Text(text, fontWeight = FontWeight.SemiBold)
+        // Icon circle
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(CircleShape)
+                .background(
+                    if (isGranted) GlowDefault.copy(alpha = 0.2f)
+                    else Surface2
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector     = icon,
+                contentDescription = null,
+                tint            = if (isGranted) GlowDefault else TextSecondary,
+                modifier        = Modifier.size(22.dp),
+            )
+        }
+
+        // Text
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text  = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = if (isGranted) TextPrimary else TextPrimary,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text  = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSecondary,
+            )
+        }
+
+        // Checkmark / tap to grant
+        AnimatedVisibility(visible = isGranted) {
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(GlowDefault.copy(alpha = 0.2f))
+                    .border(1.dp, GlowDefault.copy(alpha = 0.5f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector     = Icons.Default.Check,
+                    contentDescription = "Granted",
+                    tint            = GlowDefault,
+                    modifier        = Modifier.size(16.dp),
+                )
+            }
+        }
+
+        AnimatedVisibility(visible = !isGranted) {
+            Button(
+                onClick = onClick,
+                modifier = Modifier.width(72.dp).height(34.dp),
+                shape   = RoundedCornerShape(10.dp),
+                colors  = ButtonDefaults.buttonColors(
+                    containerColor = GlowDefault.copy(alpha = 0.18f),
+                    contentColor   = GlowDefault,
+                ),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
+            ) {
+                Text("Allow", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+            }
+        }
     }
 }
