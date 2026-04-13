@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import io.cadence.music.data.model.MentalState
 import io.cadence.music.data.model.SensorState
 
 @Composable
@@ -23,6 +24,7 @@ fun DebugScreen(viewModel: DebugViewModel = hiltViewModel()) {
     val state by viewModel.sensorState.collectAsState(initial = SensorState())
     val scene by viewModel.scene.collectAsState(initial = null)
     val candidate by viewModel.candidateScene.collectAsState(initial = null)
+    val mentalState by viewModel.mentalState.collectAsState(initial = null)
 
     Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFF0A0A0A)) {
         Column(
@@ -55,6 +57,23 @@ fun DebugScreen(viewModel: DebugViewModel = hiltViewModel()) {
             Text("Raw: ${candidate?.displayName() ?: "—"}", color = Color.White.copy(alpha = 0.7f))
             Text("Confirmed: ${scene?.displayName() ?: "—"}", color = Color.White)
             Text("Hour: ${state.hourOfDay}:00", color = Color.White.copy(alpha = 0.7f))
+
+            Text("— Mental State —", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.5f))
+            if (mentalState != null) {
+                val ms = mentalState!!
+                val valenceStr = ms.valence?.let { v -> if (v >= 0) "+$v" else "$v" } ?: "—"
+                Text(
+                    "Arousal: ${ms.arousal ?: "—"}/10   Valence: $valenceStr/5",
+                    color = Color.White,
+                )
+                Text(
+                    "Stress: ${ms.stress ?: "—"}/10   Energy: ${ms.energy ?: "—"}/10   Focus: ${ms.focus ?: "—"}/10",
+                    color = Color.White,
+                )
+                Text("Mood: ${ms.mood ?: "—"}", color = Color.White)
+            } else {
+                Text("(awaiting LLM)", color = Color.White.copy(alpha = 0.3f))
+            }
         }
     }
 }

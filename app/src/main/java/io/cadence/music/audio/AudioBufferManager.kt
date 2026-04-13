@@ -5,6 +5,7 @@ import io.cadence.music.data.api.GenerationRepository
 import io.cadence.music.data.api.SongParams
 import io.cadence.music.data.api.StreamingChunk
 import io.cadence.music.data.model.GeneratedSong
+import io.cadence.music.data.model.MentalState
 import io.cadence.music.data.model.Scene
 import io.cadence.music.data.model.SensorState
 import io.cadence.music.domain.ParamsBuilder
@@ -74,6 +75,9 @@ class AudioBufferManager @Inject constructor(
     private val _currentSongParams = MutableStateFlow<SongParams?>(null)
     val currentSongParams: StateFlow<SongParams?> = _currentSongParams
 
+    private val _currentMentalState = MutableStateFlow<MentalState?>(null)
+    val currentMentalState: StateFlow<MentalState?> = _currentMentalState
+
     private val _lastError = MutableStateFlow<String?>(null)
     val lastError: StateFlow<String?> = _lastError
 
@@ -130,6 +134,7 @@ class AudioBufferManager @Inject constructor(
             Log.d(TAG, "Worker: OpenRouter params fetched — descriptions=${it.descriptions} type=${it.auto_prompt_audio_type}")
         }
         _currentSongParams.value = params
+        _currentMentalState.value = musicRepository.translatedMentalState.value
         Log.d(TAG, "Worker: params ready — descriptions=${params.descriptions} type=${params.auto_prompt_audio_type} epoch=$myEpoch")
 
         if (myEpoch != generationEpoch) {
@@ -175,6 +180,7 @@ class AudioBufferManager @Inject constructor(
         val song = GeneratedSong(
             id          = System.currentTimeMillis(),
             params      = params,
+            mentalState = _currentMentalState.value,
             scene       = currentScene,
             generatedAt = System.currentTimeMillis(),
         )
@@ -189,6 +195,7 @@ class AudioBufferManager @Inject constructor(
         sessionParams = null     // force OpenRouter re-query for this new session
         _currentMetricsContext.value = ""
         _currentSongParams.value = null
+        _currentMentalState.value = null
         enqueueGeneration(sensorState, scene)
     }
 
