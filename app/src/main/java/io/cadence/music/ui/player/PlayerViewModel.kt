@@ -8,6 +8,7 @@ import io.cadence.music.audio.PlaybackProgress
 import io.cadence.music.audio.PlaybackState
 import io.cadence.music.data.api.SongParams
 import io.cadence.music.data.model.GeneratedSong
+import io.cadence.music.data.model.MentalState
 import io.cadence.music.data.model.Scene
 import io.cadence.music.data.model.SensorState
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -42,6 +43,9 @@ class PlayerViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
 
     val currentSongParams: StateFlow<SongParams?> = orchestrator.currentSongParams
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    val currentMentalState: StateFlow<MentalState?> = orchestrator.currentMentalState
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     val lastError: StateFlow<String?> = orchestrator.lastError

@@ -77,6 +77,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import io.cadence.music.audio.PlaybackProgress
 import io.cadence.music.audio.PlaybackState
 import io.cadence.music.data.model.GeneratedSong
+import io.cadence.music.data.model.MentalState
 import io.cadence.music.data.model.Scene
 import kotlinx.coroutines.delay
 import java.util.concurrent.TimeUnit
@@ -106,6 +107,7 @@ fun PlayerScreen(viewModel: PlayerViewModel = hiltViewModel()) {
     val chunksReady by viewModel.chunksReady.collectAsState()
     val metricsContext by viewModel.currentMetricsContext.collectAsState()
     val songParams by viewModel.currentSongParams.collectAsState()
+    val mentalState by viewModel.currentMentalState.collectAsState()
     val lastError by viewModel.lastError.collectAsState()
     val songHistory by viewModel.songHistory.collectAsState()
     val playbackProgress by viewModel.playbackProgress.collectAsState()
@@ -429,7 +431,29 @@ fun PlayerScreen(viewModel: PlayerViewModel = hiltViewModel()) {
                             )
 
                             Text(
-                                text = "OUTPUT: GENERATED PROMPT",
+                                text = "STEP 1A: MENTAL STATE",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF4CAF50),
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            if (mentalState != null) {
+                                MentalStateRow(mentalState!!)
+                            } else {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = Color(0xFF4CAF50)
+                                )
+                            }
+
+                            HorizontalDivider(
+                                modifier = Modifier.padding(vertical = 12.dp),
+                                color = Color.White.copy(alpha = 0.1f)
+                            )
+
+                            Text(
+                                text = "STEP 1B: GENERATED PROMPT",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = Color(0xFF4CAF50),
                                 fontWeight = FontWeight.Bold
@@ -868,6 +892,31 @@ private fun timeAgo(millis: Long): String {
         minutes < 1 -> "just now"
         minutes < 60 -> "${minutes}m ago"
         else -> "${TimeUnit.MILLISECONDS.toHours(diff)}h ago"
+    }
+}
+
+@Composable
+fun MentalStateRow(ms: MentalState) {
+    val valenceStr = ms.valence?.let { v -> if (v >= 0) "+$v" else "$v" } ?: "—"
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            text = "Arousal: ${ms.arousal ?: "—"}/10   Valence: $valenceStr/5   Stress: ${ms.stress ?: "—"}/10",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color.White.copy(alpha = 0.9f),
+        )
+        Text(
+            text = "Energy: ${ms.energy ?: "—"}/10   Focus: ${ms.focus ?: "—"}/10",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color.White.copy(alpha = 0.9f),
+        )
+        ms.mood?.let { mood ->
+            Text(
+                text = "Mood: $mood",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.7f),
+                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+            )
+        }
     }
 }
 
