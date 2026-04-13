@@ -1,5 +1,6 @@
 package io.cadence.music.data.api
 
+import io.cadence.music.data.model.MentalState
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import java.io.File
@@ -15,6 +16,12 @@ interface GenerationRepository {
      * Step 2 (audio rendering). UI observers can show style/lyrics while audio renders.
      */
     val translatedSongParams: StateFlow<SongParams?>
+
+    /**
+     * Mental state estimated by Step 1a (psychophysiologist LLM), populated before
+     * [translatedSongParams]. Null until the first successful estimation.
+     */
+    val translatedMentalState: StateFlow<MentalState?>
 
     /** Step 1 — OpenRouter prompt translation. Always returns usable params (falls back on error). */
     suspend fun translateMetrics(metricsContext: String): SongParams

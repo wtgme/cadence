@@ -3,6 +3,7 @@ package io.cadence.music.audio
 import io.cadence.music.data.api.GenerationRepository
 import io.cadence.music.data.api.SongParams
 import io.cadence.music.data.api.StreamingChunk
+import io.cadence.music.data.model.MentalState
 import io.cadence.music.data.model.Scene
 import io.cadence.music.data.model.SensorState
 import io.cadence.music.domain.ParamsBuilder
@@ -46,6 +47,7 @@ class AudioBufferManagerTest {
         var callCount = 0
         val repo = object : GenerationRepository {
             override val translatedSongParams = MutableStateFlow<SongParams?>(null)
+            override val translatedMentalState = MutableStateFlow<MentalState?>(null)
             override suspend fun translateMetrics(ctx: String) = fakeSongParams
             override fun generateAudioStream(params: SongParams): Flow<StreamingChunk> =
                 streamBlock(++callCount)

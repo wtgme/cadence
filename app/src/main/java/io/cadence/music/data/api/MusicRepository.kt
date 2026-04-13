@@ -3,6 +3,7 @@ package io.cadence.music.data.api
 import android.util.Log
 import com.squareup.moshi.Moshi
 import io.cadence.music.BuildConfig
+import io.cadence.music.data.model.MentalState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -18,9 +19,15 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Two-step music generation pipeline:
- *   Step 1 — OpenRouter (nemotron-3-super-120b-a12b:free): biometric context → [SongParams]
- *   Step 2 — [GenerationBackend] (SongGeneration): [SongParams] → audio file
+ * Three-step music generation pipeline:
+ *   Step 1a — OpenRouter (nemotron): biometric context → [MentalState]
+ *   Step 1b — OpenRouter (nemotron): [MentalState] → [SongParams]
+ *   Step 2  — [GenerationBackend] (SongGeneration): [SongParams] → audio file
+ *
+ * Fallback chain if the two-query path fails:
+ *   1. Two-query (1a → 1b)         ← preferred
+ *   2. Single-query (original prompt) ← if either step fails
+ *   3. Hardcoded [fallbackParams]   ← if OpenRouter is unreachable
  */
 @Singleton
 class MusicRepository @Inject constructor(
@@ -37,12 +44,15 @@ class MusicRepository @Inject constructor(
     private val _translatedSongParams = MutableStateFlow<SongParams?>(null)
     override val translatedSongParams: StateFlow<SongParams?> = _translatedSongParams
 
+    private val _translatedMentalState = MutableStateFlow<MentalState?>(null)
+    override val translatedMentalState: StateFlow<MentalState?> = _translatedMentalState
+
     private fun publishTranslatedParams(params: SongParams) {
         Log.d(TAG, "SongParams: descriptions=${params.descriptions} auto_prompt_type=${params.auto_prompt_audio_type}")
         _translatedSongParams.value = params
     }
 
-    // ── Step 1: OpenRouter (minimax-m2.5) → SongParams ────────────────────────
+    // ── Step 1 (public): two-query pipeline with single-query fallback ─────────
 
     override suspend fun translateMetrics(metricsContext: String): SongParams =
         withContext(Dispatchers.IO) {
@@ -52,76 +62,30 @@ class MusicRepository @Inject constructor(
                 return@withContext fallbackParams(metricsContext).also { publishTranslatedParams(it) }
             }
             try {
-                @Suppress("UNCHECKED_CAST")
-                val bodyJson = moshi.adapter(Map::class.java as Class<Map<String, Any>>).toJson(mapOf(
-                    "model" to OPENROUTER_MODEL,
-                    "messages" to listOf(
-                        mapOf("role" to "system", "content" to SYSTEM_INSTRUCTION),
-                        mapOf("role" to "user", "content" to "Biometric & environmental snapshot:\n$metricsContext"),
-                    ),
-                    "temperature" to 0.7,
-                ))
-                val request = Request.Builder()
-                    .url("$OPENROUTER_BASE_URL/chat/completions")
-                    .header("Authorization", "Bearer $apiKey")
-                    .header("HTTP-Referer", "https://cadence.music")
-                    .header("X-Title", "Cadence")
-                    .post(bodyJson.toRequestBody(JSON))
-                    .build()
+                // Step 1a: sensor metrics → mental state
+                val mentalState = estimateMentalState(metricsContext, apiKey)
+                _translatedMentalState.value = mentalState
+                Log.d(TAG, "Step 1a: arousal=${mentalState?.arousal} valence=${mentalState?.valence} stress=${mentalState?.stress} energy=${mentalState?.energy} focus=${mentalState?.focus} mood=${mentalState?.mood}")
 
-                Log.d(TAG, "OpenRouter → POST /chat/completions model=$OPENROUTER_MODEL")
-                logChunked("OpenRouter system prompt", SYSTEM_INSTRUCTION)
-                logChunked("OpenRouter user prompt", "Biometric & environmental snapshot:\n$metricsContext")
-
-                var lastCode = -1
-                var lastErrBody = ""
-                for (attempt in 1..MAX_ATTEMPTS) {
-                    val tStart = System.currentTimeMillis()
-                    val result: SongParams? = try {
-                        val call = openRouterClient.newCall(request.newBuilder().build())
-                        call.execute().use { response ->
-                            val elapsed = System.currentTimeMillis() - tStart
-                            if (!response.isSuccessful) {
-                                lastCode = response.code
-                                lastErrBody = response.body?.string()?.take(300).orEmpty()
-                                Log.w(TAG, "OpenRouter ← HTTP ${response.code} in ${elapsed}ms (attempt $attempt/$MAX_ATTEMPTS) — $lastErrBody")
-                                null
-                            } else {
-                                val raw = response.body?.string().orEmpty()
-                                Log.d(TAG, "OpenRouter ← HTTP ${response.code} in ${elapsed}ms (${raw.length}B)")
-                                val content = extractContent(raw)
-                                if (content.isNullOrBlank()) {
-                                    Log.w(TAG, "OpenRouter returned empty content — raw head: ${raw.take(300)}")
-                                    null
-                                } else {
-                                    Log.d(TAG, "OpenRouter content (${content.length}B): ${content.take(400)}")
-                                    val parsed = parseSongParams(extractJson(content))
-                                    if (parsed != null) {
-                                        Log.d(TAG, "OpenRouter parsed → descriptions=${parsed.descriptions} auto_prompt=${parsed.auto_prompt_audio_type}")
-                                        parsed
-                                    } else {
-                                        Log.w(TAG, "OpenRouter parse failed (descriptions missing or schema mismatch)")
-                                        null
-                                    }
-                                }
-                            }
-                        }
-                    } catch (e: java.net.SocketTimeoutException) {
-                        lastCode = -1
-                        Log.w(TAG, "OpenRouter timed out (attempt $attempt/$MAX_ATTEMPTS)")
-                        null
+                if (mentalState != null && mentalState.arousal != null && mentalState.valence != null) {
+                    // Step 1b: mental state → song params
+                    val params = translateMentalStateToParams(mentalState, apiKey)
+                    if (params != null) {
+                        publishTranslatedParams(params)
+                        return@withContext params
                     }
-                    if (result != null) {
-                        publishTranslatedParams(result)
-                        return@withContext result
-                    }
-                    val retriable = lastCode == -1 || lastCode == 429 || lastCode in 500..599
-                    if (!retriable || attempt == MAX_ATTEMPTS) break
-                    val backoffMs = 2000L * (1 shl (attempt - 1))
-                    Log.d(TAG, "OpenRouter retrying after ${backoffMs}ms (HTTP $lastCode)")
-                    delay(backoffMs)
+                    Log.w(TAG, "Step 1b failed — falling back to single-query")
+                } else {
+                    Log.w(TAG, "Step 1a failed (missing arousal/valence) — falling back to single-query")
                 }
-                Log.w(TAG, "OpenRouter gave up after $MAX_ATTEMPTS attempts (last HTTP $lastCode) — using fallback params")
+
+                // Single-query fallback (original SYSTEM_INSTRUCTION)
+                val singleResult = singleQueryTranslation(metricsContext, apiKey)
+                if (singleResult != null) {
+                    publishTranslatedParams(singleResult)
+                    return@withContext singleResult
+                }
+
                 fallbackParams(metricsContext).also { publishTranslatedParams(it) }
             } catch (e: Exception) {
                 Log.e(TAG, "OpenRouter translation failed (${e.javaClass.simpleName}: ${e.message}) — using fallback params")
@@ -129,15 +93,172 @@ class MusicRepository @Inject constructor(
             }
         }
 
+    // ── Step 1a: sensor metrics → MentalState ─────────────────────────────────
+
+    private suspend fun estimateMentalState(metricsContext: String, apiKey: String): MentalState? {
+        Log.d(TAG, "Step 1a: estimating mental state")
+        logChunked("Step 1a system", MENTAL_STATE_SYSTEM)
+        logChunked("Step 1a user", metricsContext)
+
+        val rawText = callOpenRouter(
+            apiKey = apiKey,
+            systemPrompt = MENTAL_STATE_SYSTEM,
+            userMessage = "Biometric sensor snapshot:\n$metricsContext",
+            label = "Step 1a",
+        ) ?: return null
+
+        return parseMentalState(extractJson(rawText), rawText)
+    }
+
+    // ── Step 1b: MentalState → SongParams ─────────────────────────────────────
+
+    private suspend fun translateMentalStateToParams(mentalState: MentalState, apiKey: String): SongParams? {
+        val mentalStateJson = buildMentalStateJson(mentalState)
+        Log.d(TAG, "Step 1b: translating mental state to song params")
+        logChunked("Step 1b user", mentalStateJson)
+
+        val rawText = callOpenRouter(
+            apiKey = apiKey,
+            systemPrompt = SONG_PARAMS_FROM_MENTAL_STATE_SYSTEM,
+            userMessage = "User's current mental state:\n$mentalStateJson",
+            label = "Step 1b",
+        ) ?: return null
+
+        return parseSongParams(extractJson(rawText))
+    }
+
+    // ── Single-query fallback ─────────────────────────────────────────────────
+
+    private suspend fun singleQueryTranslation(metricsContext: String, apiKey: String): SongParams? {
+        Log.d(TAG, "Single-query fallback: translating metrics directly")
+        logChunked("Single-query system", SYSTEM_INSTRUCTION)
+
+        val rawText = callOpenRouter(
+            apiKey = apiKey,
+            systemPrompt = SYSTEM_INSTRUCTION,
+            userMessage = "Biometric & environmental snapshot:\n$metricsContext",
+            label = "single-query",
+        ) ?: return null
+
+        return parseSongParams(extractJson(rawText))
+    }
+
+    // ── OpenRouter call with retry ────────────────────────────────────────────
+
+    @Suppress("UNCHECKED_CAST")
+    private suspend fun callOpenRouter(
+        apiKey: String,
+        systemPrompt: String,
+        userMessage: String,
+        label: String,
+    ): String? {
+        val bodyJson = moshi.adapter(Map::class.java as Class<Map<String, Any>>).toJson(mapOf(
+            "model" to OPENROUTER_MODEL,
+            "messages" to listOf(
+                mapOf("role" to "system", "content" to systemPrompt),
+                mapOf("role" to "user", "content" to userMessage),
+            ),
+            "temperature" to 0.7,
+        ))
+        val request = Request.Builder()
+            .url("$OPENROUTER_BASE_URL/chat/completions")
+            .header("Authorization", "Bearer $apiKey")
+            .header("HTTP-Referer", "https://cadence.music")
+            .header("X-Title", "Cadence")
+            .post(bodyJson.toRequestBody(JSON))
+            .build()
+
+        Log.d(TAG, "OpenRouter → POST /chat/completions model=$OPENROUTER_MODEL [$label]")
+
+        var lastCode = -1
+        var lastErrBody = ""
+        for (attempt in 1..MAX_ATTEMPTS) {
+            val tStart = System.currentTimeMillis()
+            val result: String? = try {
+                val call = openRouterClient.newCall(request.newBuilder().build())
+                call.execute().use { response ->
+                    val elapsed = System.currentTimeMillis() - tStart
+                    if (!response.isSuccessful) {
+                        lastCode = response.code
+                        lastErrBody = response.body?.string()?.take(300).orEmpty()
+                        Log.w(TAG, "OpenRouter [$label] ← HTTP ${response.code} in ${elapsed}ms (attempt $attempt/$MAX_ATTEMPTS) — $lastErrBody")
+                        null
+                    } else {
+                        val raw = response.body?.string().orEmpty()
+                        Log.d(TAG, "OpenRouter [$label] ← HTTP ${response.code} in ${elapsed}ms (${raw.length}B)")
+                        val content = extractContent(raw)
+                        if (content.isNullOrBlank()) {
+                            Log.w(TAG, "OpenRouter [$label] returned empty content — raw head: ${raw.take(300)}")
+                            null
+                        } else {
+                            Log.d(TAG, "OpenRouter [$label] content (${content.length}B): ${content.take(400)}")
+                            content
+                        }
+                    }
+                }
+            } catch (e: java.net.SocketTimeoutException) {
+                lastCode = -1
+                Log.w(TAG, "OpenRouter [$label] timed out (attempt $attempt/$MAX_ATTEMPTS)")
+                null
+            }
+
+            if (result != null) return result
+
+            val retriable = lastCode == -1 || lastCode == 429 || lastCode in 500..599
+            if (!retriable || attempt == MAX_ATTEMPTS) break
+            val backoffMs = 2000L * (1 shl (attempt - 1))
+            Log.d(TAG, "OpenRouter [$label] retrying after ${backoffMs}ms (HTTP $lastCode)")
+            delay(backoffMs)
+        }
+        Log.w(TAG, "OpenRouter [$label] gave up after $MAX_ATTEMPTS attempts (last HTTP $lastCode)")
+        return null
+    }
+
+    // ── Parsing ───────────────────────────────────────────────────────────────
+
+    private fun parseMentalState(json: String, rawLlmText: String): MentalState? {
+        @Suppress("UNCHECKED_CAST")
+        val map = moshi.adapter(Map::class.java).fromJson(json) as? Map<String, Any?> ?: return null
+        val arousal = (map["arousal"] as? Number)?.toInt()
+        val valence = (map["valence"] as? Number)?.toInt()
+        // Require at least arousal and valence for a usable mental state
+        if (arousal == null && valence == null) return null
+        return MentalState(
+            arousal = arousal,
+            valence = valence,
+            stress  = (map["stress"] as? Number)?.toInt(),
+            energy  = (map["energy"] as? Number)?.toInt(),
+            focus   = (map["focus"] as? Number)?.toInt(),
+            mood    = (map["mood"] as? String)?.trim(),
+            rawLlmText = rawLlmText,
+        )
+    }
+
+    /**
+     * Serialises [MentalState] fields (excluding [MentalState.rawLlmText]) to a JSON string
+     * for use as the Step 1b user message.
+     */
+    private fun buildMentalStateJson(ms: MentalState): String {
+        val map = buildMap<String, Any> {
+            ms.arousal?.let { put("arousal", it) }
+            ms.valence?.let { put("valence", it) }
+            ms.stress?.let  { put("stress", it) }
+            ms.energy?.let  { put("energy", it) }
+            ms.focus?.let   { put("focus", it) }
+            ms.mood?.let    { put("mood", it) }
+        }
+        @Suppress("UNCHECKED_CAST")
+        return moshi.adapter(Map::class.java as Class<Map<String, Any>>).toJson(map)
+    }
+
     /**
      * Parse LLM response into [SongParams].
-     * Accepts: lyric/lyrics, descriptions/tags, auto_prompt_audio_type.
+     * Accepts: descriptions/tags, auto_prompt_audio_type.
      */
     @Suppress("UNCHECKED_CAST")
     private fun parseSongParams(json: String): SongParams? {
         val map = moshi.adapter(Map::class.java).fromJson(json) as? Map<String, Any?> ?: return null
 
-        // descriptions is the primary signal — treat a missing/blank response as a parse failure
         val descriptions = when (val d = map["descriptions"] ?: map["tags"]) {
             is String -> d.trim().ifBlank { null }
             is List<*> -> d.filterNotNull().joinToString(",") { it.toString().trim() }.ifBlank { null }
@@ -149,7 +270,7 @@ class MusicRepository @Inject constructor(
             ?.takeIf { it in AUTO_PROMPT_TYPES }
 
         return SongParams(
-            lyric = ".",   // bgm mode ignores lyric entirely on the server
+            lyric = ".",
             descriptions = descriptions,
             auto_prompt_audio_type = autoPromptType,
             generate_type = "bgm",
@@ -171,12 +292,10 @@ class MusicRepository @Inject constructor(
         val isRainy   = metricsContext.contains("rainy", ignoreCase = true) ||
                         metricsContext.contains("rain", ignoreCase = true)
 
-        // SpO2 safety override
         if (spo2 in 1..93) {
             return SongParams(lyric = ".", descriptions = "ambient,slow,peaceful,atmospheric", auto_prompt_audio_type = "Soundtrack", generate_type = "bgm")
         }
 
-        // Energy tier from readiness, falling back to HR + speed
         val energyTier = when {
             readiness >= 76              -> 4
             readiness >= 51              -> 3
@@ -246,15 +365,108 @@ class MusicRepository @Inject constructor(
             "R&B/Soul", "Ballad", "Jazz", "World", "Hip-Hop", "Funk", "Soundtrack", "Auto",
         )
 
+        // ── Step 1a: sensor metrics → MentalState ─────────────────────────────
+
+        private val MENTAL_STATE_SYSTEM = """
+            You are a psychophysiologist trained in the Russell circumplex model of affect.
+            Given real-time biometric and environmental sensor data, estimate the user's current
+            mental and physiological state. Output ONLY a valid JSON object — no explanation,
+            no markdown fences.
+
+            JSON schema:
+              "arousal": integer 0–10  (Russell circumplex activation axis.
+                         0 = deeply relaxed/asleep, 5 = neutral alertness, 10 = maximally activated/agitated)
+              "valence": integer -5 to +5  (Russell circumplex pleasure axis.
+                         -5 = very distressed/miserable, 0 = neutral, +5 = very happy/elated)
+              "stress":  integer 0–10  (psychological stress. 0 = completely relaxed, 10 = extreme stress)
+              "energy":  integer 0–10  (subjective physical energy. 0 = exhausted/depleted, 10 = fully energised)
+              "focus":   integer 0–10  (attentional focus. 0 = scattered/drowsy, 10 = deep sustained concentration)
+              "mood":    string — one short phrase (e.g. "alert and motivated", "tired but content")
+
+            Interpretation guidelines:
+              - Arousal and energy are DIFFERENT. A stressed commuter may have high arousal (tense, elevated HR)
+                but LOW energy (poorly rested, depleted). A runner has high arousal AND high energy.
+              - Stress and arousal are DIFFERENT. High arousal can be positive (exercise, excitement) or
+                negative (anxiety, stress). Use sleep quality, readiness score, time, and context to disambiguate.
+              - Focus depends on context: stationary + afternoon + good sleep → focused work;
+                stationary + night + low readiness → drowsy.
+              - The "Music guidance" line is a mechanical heuristic. You may DISAGREE with it when the
+                biometric context suggests a different state. For example: if readiness says "High" but
+                sleep was poor and it is Monday morning during a commute, the user is likely tired and
+                stressed, not energised.
+              - Use the FULL range of each scale. Do not cluster everything around 5.
+
+            Key signals:
+              - Heart rate > 100 at rest → stress or post-exercise; > 140 → active exercise
+              - Low readiness + high activity → pushing through fatigue
+              - Deep sleep < 10% → impaired physical recovery (lower energy)
+              - REM < 15% → impaired cognitive function (lower focus)
+              - SpO2 < 94% → physiological distress (high stress, low energy)
+              - Late night (after 9 pm) → circadian low (lower arousal/energy)
+              - Rain/overcast → lower valence; sun/clear → higher valence
+              - Weekday commute → more stress than weekend leisure
+        """.trimIndent()
+
+        // ── Step 1b: MentalState → SongParams ─────────────────────────────────
+
+        private val SONG_PARAMS_FROM_MENTAL_STATE_SYSTEM = """
+            You are an expert music therapist and producer. Given a user's current mental and
+            physiological state, select instrumental music parameters for an AI music generation model.
+            Output ONLY a valid JSON object — no explanation, no markdown fences.
+
+            JSON fields:
+              "descriptions": 3–6 comma-separated lowercase tags from these pools:
+                  Genre    : pop, jazz, rock, electronic, ambient, classical, funk, r&b, hip-hop, folk, new-age, blues
+                  Emotion  : energetic, calm, peaceful, uplifting, melancholic, introspective, focused,
+                             euphoric, powerful, dreamy, relaxing, sad, cheerful, romantic
+                  Instrument: piano, synthesizer, electric guitar, acoustic guitar, drums, drum machine,
+                              bass guitar, strings, violin, saxophone, trumpet, flute
+              "auto_prompt_audio_type": exactly one of:
+                  Pop, Latin, Rock, Electronic, Metal, Country, R&B/Soul, Ballad, Jazz, World,
+                  Hip-Hop, Funk, Soundtrack, Auto
+                  NOTE: "Ambient" is NOT valid — use Soundtrack instead.
+
+            DECISION PROCEDURE — follow this exact priority order:
+
+            PRIORITY 1 — STRESS OVERRIDE (mandatory):
+              If stress >= 7: select a calming genre ONLY.
+                Allowed genres    : ambient, classical, jazz, new-age, folk
+                Allowed emotions  : calm, peaceful, relaxing, dreamy, introspective
+                Allowed instruments: piano, strings, acoustic guitar, flute, saxophone
+                auto_prompt_audio_type MUST be one of: Soundtrack, Jazz, Ballad
+                Do NOT use: electronic, rock, pop, funk, drums, drum machine, energetic, powerful, euphoric
+                This rule applies REGARDLESS of arousal or energy values.
+
+            PRIORITY 2 — ISO-PRINCIPLE (match then nudge):
+              Match music energy to current arousal; nudge valence gently upward. Do not jump more
+              than one tier from current arousal.
+                arousal 8–10 → electronic, rock, or pop + energetic/powerful/euphoric + drums/synthesizer/electric guitar
+                               auto_prompt_audio_type: Electronic, Rock, or Pop
+                arousal 5–7  → pop, funk, or r&b + focused/uplifting/cheerful + bass guitar/synthesizer/piano
+                               auto_prompt_audio_type: Pop, Funk, or R&B/Soul
+                arousal 3–4  → jazz, folk, or classical + focused/cheerful/introspective + piano/saxophone/acoustic guitar
+                               auto_prompt_audio_type: Jazz, Ballad, or Soundtrack
+                arousal 0–2  → ambient, classical, or new-age + calm/peaceful/dreamy + piano/strings/flute
+                               auto_prompt_audio_type: Soundtrack or Ballad
+
+            PRIORITY 3 — MODIFIERS (apply after Priorities 1 and 2):
+              - If focus >= 7: include "focused". Prefer piano, strings, acoustic guitar (minimal percussion).
+              - If energy <= 3 AND arousal >= 5: user is pushing through fatigue — dial back one arousal tier.
+              - If valence <= -2: include exactly one of "melancholic" or "introspective" (not both).
+              - If valence >= 3: include exactly one of "uplifting" or "euphoric" (not both).
+
+            CONSTRAINTS:
+              - Never combine contradictory emotions: calm+energetic, peaceful+powerful, dreamy+euphoric.
+              - Encode tempo through genre — do NOT use words like fast, slow, mid-tempo, driving, upbeat.
+              - Include at least one instrument tag and at least one emotion tag.
+              - descriptions must be a single comma-separated string, not an array.
+        """.trimIndent()
+
+        // ── Single-query fallback (original prompt) ────────────────────────────
+
         /**
-         * System prompt for OpenRouter. Asks for SongGeneration-compatible JSON.
-         *
-         * The server always uses generate_type="bgm" (pure instrumental), which ignores
-         * the lyric field entirely — so we always pass lyric=".". Only descriptions and
-         * auto_prompt_audio_type affect the actual sound output.
-         *
-         * Server applies: "[Musicality-very-high], [Pure-Music], " + descriptions.lowercase()
-         * before passing to the model, so tags must be plain lowercase words.
+         * Original single-query prompt. Used as a fallback when either step 1a or 1b fails.
+         * Kept intentionally separate from the two-query prompts.
          */
         private val SYSTEM_INSTRUCTION = """
             You are a biometric-aware music producer. Translate a real-time sensor snapshot into
@@ -284,27 +496,6 @@ class MusicRepository @Inject constructor(
               - Low REM / low deep sleep flags → no drums or drum machine; use piano, strings, or acoustic guitar
               - Night/evening → add dreamy or introspective; no drum machine
               - Never mix contradictory emotions (e.g. calm + energetic)
-
-            Examples:
-            User: Activity: Stationary, HR: 52 bpm, Time: Night (10pm), Weather: overcast
-            Music guidance: Energy tier: Low — target <60 BPM (parasympathetic rebound).
-            Assistant: {"descriptions": "ambient, peaceful, dreamy, relaxing, piano, strings", "auto_prompt_audio_type": "Soundtrack"}
-
-            User: Activity: Running, HR: 162 bpm, Time: Morning (8am), Weather: sunny
-            Music guidance: Energy tier: Very High — target 145+ BPM (sympathetic drive).
-            Assistant: {"descriptions": "electronic, energetic, powerful, euphoric, synthesizer, drums", "auto_prompt_audio_type": "Electronic"}
-
-            User: Activity: Driving/Commuting, HR: 80 bpm, Time: Morning (8am), Weather: overcast
-            Music guidance: Energy tier: High — target 110–130 BPM (flow state).
-            Assistant: {"descriptions": "pop, energetic, focused, uplifting, bass guitar, synthesizer", "auto_prompt_audio_type": "Pop"}
-
-            User: Activity: Stationary, HR: 68 bpm, Time: Afternoon (2pm), Weather: sunny
-            Music guidance: Energy tier: High — target 110–130 BPM (flow state).
-            Assistant: {"descriptions": "pop, focused, uplifting, cheerful, synthesizer, bass guitar", "auto_prompt_audio_type": "Pop"}
-
-            User: Activity: Walking, HR: 95 bpm, Time: Evening (7pm), Weather: rainy
-            Music guidance: Readiness capacity: Medium — capped to Medium. Low deep sleep (8%) — reduce percussive density. Low REM (14%) — use simple melodies.
-            Assistant: {"descriptions": "jazz, melancholic, introspective, focused, piano, acoustic guitar", "auto_prompt_audio_type": "Jazz"}
         """.trimIndent()
     }
 }

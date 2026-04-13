@@ -6,6 +6,7 @@ import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.cadence.music.data.api.SongParams
 import io.cadence.music.data.model.GeneratedSong
+import io.cadence.music.data.model.MentalState
 import io.cadence.music.data.model.Scene
 import io.cadence.music.data.model.SensorState
 import io.cadence.music.data.sensor.LocationService
@@ -57,6 +58,7 @@ class MusicOrchestrator @Inject constructor(
     val chunksReady: StateFlow<Int> = bufferManager.chunksReady
     val currentMetricsContext: StateFlow<String> = bufferManager.currentMetricsContext
     val currentSongParams: StateFlow<SongParams?> = bufferManager.currentSongParams
+    val currentMentalState: StateFlow<MentalState?> = bufferManager.currentMentalState
     val lastError: StateFlow<String?> = bufferManager.lastError
     val songHistory = bufferManager.songHistory
     val playbackProgress = bufferManager.playbackProgress

@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.cadence.music.audio.MusicOrchestrator
+import io.cadence.music.data.model.MentalState
 import io.cadence.music.data.model.Scene
 import io.cadence.music.data.model.SensorState
 import io.cadence.music.data.sensor.SensorStateCollector
@@ -25,5 +26,8 @@ class DebugViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     val candidateScene: StateFlow<Scene?> = orchestrator.candidateScene
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    val mentalState: StateFlow<MentalState?> = orchestrator.currentMentalState
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 }
