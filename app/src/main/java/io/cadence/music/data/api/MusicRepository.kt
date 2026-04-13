@@ -19,7 +19,7 @@ import javax.inject.Singleton
 
 /**
  * Two-step music generation pipeline:
- *   Step 1 — OpenRouter (minimax-m2.5:free): biometric context → [SongParams]
+ *   Step 1 — OpenRouter (nemotron-3-super-120b-a12b:free): biometric context → [SongParams]
  *   Step 2 — [GenerationBackend] (SongGeneration): [SongParams] → audio file
  */
 @Singleton
@@ -238,7 +238,7 @@ class MusicRepository @Inject constructor(
         private val JSON = "application/json; charset=utf-8".toMediaType()
 
         private const val OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-        private const val OPENROUTER_MODEL = "minimax/minimax-m2.5:free"
+        private const val OPENROUTER_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"
         private const val MAX_ATTEMPTS = 3
 
         private val AUTO_PROMPT_TYPES = setOf(

@@ -6,8 +6,8 @@ An Android app that generates music in real time, adapting to your biometrics an
 
 Cadence reads your heart rate, GPS speed, step count, sleep score, SpO2, and local weather, then runs a two-step AI pipeline to produce audio that matches your physiological state:
 
-1. **Gemma** (self-hosted) — translates live sensor metrics into structured song parameters (genre, BPM, mood, lyric style)
-2. **MusicGen** (self-hosted) — generates a 4-minute audio clip from those parameters
+1. **OpenRouter** (`nvidia/nemotron-3-super-120b-a12b:free`) — translates live sensor metrics into structured song parameters (lyrics, genre tags, BPM, mood)
+2. **SongGeneration v2-large** (self-hosted) — generates an audio clip from those parameters
 
 Songs are pre-buffered so playback is uninterrupted. When your context shifts — activity level changes, scene changes, or heart rate drifts by ±15 bpm — the buffer is reprimed with fresh music.
 
@@ -23,18 +23,17 @@ Cadence detects your current scene and uses it as additional context for generat
 | Stuck in Traffic | Calm or ambient |
 | Resting | Slow, restorative, instrumental |
 
-## Self-hosted servers
+## Self-hosted server
 
 | Service | Default port | Role |
 |---|---|---|
-| MusicGen | `8000` | Audio generation |
-| Gemma | `8001` | Metrics → song parameters |
+| SongGeneration v2-large | `8888` | Audio generation |
 
-Set the server addresses in `local.properties`:
+Set the server address and OpenRouter API key in `local.properties`:
 
 ```
-SONGGEN_BASE_URL=http://<host>:8000
-GEMMA_BASE_URL=http://<host>:8001
+songgen.base.url=http://<host>:8888
+openrouter.api.key=<your-key>
 ```
 
 ## Requirements
