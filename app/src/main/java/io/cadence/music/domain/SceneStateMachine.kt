@@ -35,8 +35,27 @@ class SceneStateMachine @Inject constructor(
     private var lastEmittedScene: Scene? = null
     private var pendingCandidate: Scene? = null
 
+    /**
+     * Set by [forceScene]; suppresses auto-detection changes until the user
+     * overrides again or [resetOverride] is called (e.g. on playback stop).
+     */
+    private var userForcedScene: Scene? = null
+
     fun process(state: SensorState) {
         val candidate = detector.detect(state)
+
+        // Active user override — block auto-detection from reverting the scene.
+        // If the sensor eventually agrees with the forced scene, lift the override
+        // so normal detection can take over from here.
+        userForcedScene?.let { forced ->
+            if (candidate != forced) {
+                pendingJob?.cancel()
+                pendingCandidate = null
+                return
+            } else {
+                userForcedScene = null   // sensor now agrees — resume normal detection
+            }
+        }
 
         if (candidate == lastEmittedScene) {
             pendingJob?.cancel()
@@ -59,8 +78,17 @@ class SceneStateMachine @Inject constructor(
 
     suspend fun forceScene(scene: Scene) {
         pendingJob?.cancel()
+        pendingCandidate = null
+        userForcedScene = scene
         lastEmittedScene = scene
         _confirmedScene.emit(scene)
+    }
+
+    /** Call when starting a fresh detection session so auto-detection resumes cleanly. */
+    fun resetOverride() {
+        userForcedScene = null
+        pendingJob?.cancel()
+        pendingCandidate = null
     }
 
     companion object {

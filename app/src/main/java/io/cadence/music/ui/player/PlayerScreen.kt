@@ -1,11 +1,27 @@
 package io.cadence.music.ui.player
 
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,25 +29,38 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.MonitorHeart
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.ThumbDown
 import androidx.compose.material.icons.filled.ThumbUp
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -39,52 +68,55 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberBottomSheetScaffoldState
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.health.connect.client.PermissionController
-import androidx.health.connect.client.permission.HealthPermission
-import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
-import androidx.health.connect.client.records.BloodPressureRecord
-import androidx.health.connect.client.records.BodyTemperatureRecord
-import androidx.health.connect.client.records.DistanceRecord
-import androidx.health.connect.client.records.ExerciseSessionRecord
-import androidx.health.connect.client.records.FloorsClimbedRecord
-import androidx.health.connect.client.records.HeartRateRecord
-import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
-import androidx.health.connect.client.records.OxygenSaturationRecord
-import androidx.health.connect.client.records.RestingHeartRateRecord
-import androidx.health.connect.client.records.SleepSessionRecord
-import androidx.health.connect.client.records.StepsRecord
-import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
 import androidx.hilt.navigation.compose.hiltViewModel
 import io.cadence.music.audio.PlaybackProgress
 import io.cadence.music.audio.PlaybackState
@@ -92,7 +124,10 @@ import io.cadence.music.data.api.SongParams
 import io.cadence.music.data.model.GeneratedSong
 import io.cadence.music.data.model.MentalState
 import io.cadence.music.data.model.Scene
+import io.cadence.music.data.model.SensorState
+import io.cadence.music.data.model.UserMusicAdjustment
 import io.cadence.music.data.model.UserTasteMemory
+import io.cadence.music.ui.permissions.HEALTH_CONNECT_PERMISSIONS
 import io.cadence.music.ui.theme.FeedbackDislike
 import io.cadence.music.ui.theme.FeedbackLike
 import io.cadence.music.ui.theme.FeedbackNeutral
@@ -117,6 +152,7 @@ import io.cadence.music.ui.theme.TextTertiary
 import io.cadence.music.ui.theme.WarningAmber
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 // ── Scene helpers ──────────────────────────────────────────────────────────
 
@@ -138,24 +174,6 @@ private fun Scene?.tintColor() = when (this) {
     null                   -> SceneDefault
 }
 
-// ── Permissions (kept here to avoid duplication) ─────────────────────────
-
-private val HEALTH_CONNECT_PERMISSIONS = setOf(
-    HealthPermission.getReadPermission(HeartRateRecord::class),
-    HealthPermission.getReadPermission(StepsRecord::class),
-    HealthPermission.getReadPermission(SleepSessionRecord::class),
-    HealthPermission.getReadPermission(OxygenSaturationRecord::class),
-    HealthPermission.getReadPermission(BloodPressureRecord::class),
-    HealthPermission.getReadPermission(BodyTemperatureRecord::class),
-    HealthPermission.getReadPermission(FloorsClimbedRecord::class),
-    HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class),
-    HealthPermission.getReadPermission(TotalCaloriesBurnedRecord::class),
-    HealthPermission.getReadPermission(DistanceRecord::class),
-    HealthPermission.getReadPermission(ExerciseSessionRecord::class),
-    HealthPermission.getReadPermission(RestingHeartRateRecord::class),
-    HealthPermission.getReadPermission(HeartRateVariabilityRmssdRecord::class),
-)
-
 // ═══════════════════════════════════════════════════════════════════════════
 // PlayerScreen
 // ═══════════════════════════════════════════════════════════════════════════
@@ -163,21 +181,24 @@ private val HEALTH_CONNECT_PERMISSIONS = setOf(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlayerScreen(viewModel: PlayerViewModel = hiltViewModel()) {
-    val confirmedScene        by viewModel.currentScene.collectAsState()
-    val candidateScene        by viewModel.candidateScene.collectAsState()
-    val sensorState           by viewModel.sensorState.collectAsState()
-    val playbackState         by viewModel.playbackState.collectAsState()
-    val chunksReady           by viewModel.chunksReady.collectAsState()
-    val metricsContext        by viewModel.currentMetricsContext.collectAsState()
-    val songParams            by viewModel.currentSongParams.collectAsState()
-    val mentalState           by viewModel.currentMentalState.collectAsState()
-    val lastError             by viewModel.lastError.collectAsState()
-    val songHistory           by viewModel.songHistory.collectAsState()
-    val playbackProgress      by viewModel.playbackProgress.collectAsState()
-    val isRefreshingBiometrics by viewModel.isRefreshingBiometrics.collectAsState()
-    val hasHealthPermissions  by viewModel.hasHealthPermissions.collectAsState()
-    val healthDiagnostic      by viewModel.healthDiagnostic.collectAsState()
-    val tasteMemory           by viewModel.tasteMemory.collectAsState()
+    val confirmedScene          by viewModel.currentScene.collectAsState()
+    val candidateScene          by viewModel.candidateScene.collectAsState()
+    val sensorState             by viewModel.sensorState.collectAsState()
+    val playbackState           by viewModel.playbackState.collectAsState()
+    val chunksReady             by viewModel.chunksReady.collectAsState()
+    val metricsContext          by viewModel.currentMetricsContext.collectAsState()
+    val songParams              by viewModel.currentSongParams.collectAsState()
+    val mentalState             by viewModel.currentMentalState.collectAsState()
+    val lastError               by viewModel.lastError.collectAsState()
+    val songHistory             by viewModel.songHistory.collectAsState()
+    val playbackProgress        by viewModel.playbackProgress.collectAsState()
+    val isRefreshingBiometrics  by viewModel.isRefreshingBiometrics.collectAsState()
+    val hasHealthPermissions    by viewModel.hasHealthPermissions.collectAsState()
+    val healthDiagnostic        by viewModel.healthDiagnostic.collectAsState()
+    val tasteMemory             by viewModel.tasteMemory.collectAsState()
+    val currentAdjustment       by viewModel.currentAdjustment.collectAsState()
+    val generationStartMs       by viewModel.generationStartMs.collectAsState()
+    val isAdaptingToHrDrift     by viewModel.isAdaptingToHrDrift.collectAsState()
 
     val healthPermissionLauncher = rememberLauncherForActivityResult(
         PermissionController.createRequestPermissionResultContract()
@@ -190,28 +211,56 @@ fun PlayerScreen(viewModel: PlayerViewModel = hiltViewModel()) {
     val isPlaying   = playbackState == PlaybackState.PLAYING
     val isActive    = playbackState != PlaybackState.IDLE
 
-    var showSceneOverride by remember { mutableStateOf(false) }
+    var showSceneOverride     by remember { mutableStateOf(false) }
+    var showReasoningModal    by remember { mutableStateOf(false) }
+    var healthBannerDismissed by remember { mutableStateOf(false) }
+    var adjustmentExpanded    by remember { mutableStateOf(false) }
+
+    // Animate hero bottom padding so content shifts up when the adjustment
+    // panel expands and relaxes toward the bottom when it's collapsed.
+    val heroBottomPad by animateDpAsState(
+        targetValue = when {
+            !isActive          -> 64.dp
+            adjustmentExpanded -> 290.dp
+            else               -> 100.dp
+        },
+        animationSpec = tween(durationMillis = 350),
+        label         = "heroBottomPad",
+    )
+
+    // Next-song strip: briefly show "ready" after a new pre-gen completes
+    var showNextSongReady by remember { mutableStateOf(false) }
+    LaunchedEffect(chunksReady) {
+        if (chunksReady >= 2 && isPlaying) {
+            showNextSongReady = true
+            delay(3000)
+            showNextSongReady = false
+        }
+    }
+    val isPreGenerating = isPlaying && chunksReady < 2
 
     // Scene-tinted background
     val targetTint by animateColorAsState(
-        targetValue = confirmedScene.tintColor(),
+        targetValue   = confirmedScene.tintColor(),
         animationSpec = tween(durationMillis = 1200),
-        label = "sceneTint",
+        label         = "sceneTint",
     )
     val targetGlow by animateColorAsState(
-        targetValue = confirmedScene.glowColor(),
+        targetValue   = confirmedScene.glowColor(),
         animationSpec = tween(durationMillis = 1200),
-        label = "sceneGlow",
+        label         = "sceneGlow",
     )
 
+    val dragThreshold = with(LocalDensity.current) { 50.dp.toPx() }
     val scaffoldState = rememberBottomSheetScaffoldState()
+    val coroutineScope = rememberCoroutineScope()
 
     BottomSheetScaffold(
-        scaffoldState = scaffoldState,
-        sheetPeekHeight = 72.dp,
+        scaffoldState       = scaffoldState,
+        sheetPeekHeight     = 72.dp,
         sheetContainerColor = Surface1,
-        sheetShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        sheetDragHandle = {
+        sheetShape          = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        sheetDragHandle     = {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -229,17 +278,21 @@ fun PlayerScreen(viewModel: PlayerViewModel = hiltViewModel()) {
         },
         sheetContent = {
             BottomSheetContent(
-                sensorState          = sensorState,
-                metricsContext       = metricsContext,
-                mentalState          = mentalState,
-                songParams           = songParams,
-                songHistory          = songHistory,
-                isActive             = isActive,
-                hasHealthPermissions = hasHealthPermissions,
-                healthDiagnostic     = healthDiagnostic,
+                confirmedScene         = confirmedScene,
+                sensorState            = sensorState,
+                metricsContext         = metricsContext,
+                mentalState            = mentalState,
+                songParams             = songParams,
+                songHistory            = songHistory,
+                tasteMemory            = tasteMemory,
+                isActive               = isActive,
+                hasHealthPermissions   = hasHealthPermissions,
+                healthDiagnostic       = healthDiagnostic,
                 isRefreshingBiometrics = isRefreshingBiometrics,
-                onRefreshBiometrics  = { viewModel.refreshBiometrics() },
-                onGrantHealth        = { healthPermissionLauncher.launch(HEALTH_CONNECT_PERMISSIONS) },
+                onRefreshBiometrics    = { viewModel.refreshBiometrics() },
+                onGrantHealth          = { healthPermissionLauncher.launch(HEALTH_CONNECT_PERMISSIONS) },
+                onExpand               = { coroutineScope.launch { scaffoldState.bottomSheetState.expand() } },
+                onClearMemory          = { viewModel.resetTasteMemory() },
             )
         },
         containerColor = Color.Transparent,
@@ -249,26 +302,29 @@ fun PlayerScreen(viewModel: PlayerViewModel = hiltViewModel()) {
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        0f to targetTint.copy(alpha = 0.85f),
+                        0f   to targetTint.copy(alpha = 0.85f),
                         0.5f to Surface0,
-                        1f to Surface0,
+                        1f   to Surface0,
                     )
                 )
-                .pointerInput(Unit) {
+                .pointerInput(dragThreshold) {
                     detectHorizontalDragGestures { _, dragAmount ->
-                        if (dragAmount > 50) showSceneOverride = true
+                        if (dragAmount > dragThreshold) showSceneOverride = true
                     }
                 },
         ) {
+            // ── Hero content ──────────────────────────────────────────────
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(innerPadding)
+                    .padding(
+                        top    = innerPadding.calculateTopPadding(),
+                        bottom = innerPadding.calculateBottomPadding() + heroBottomPad,
+                    )
                     .padding(horizontal = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
             ) {
-                Spacer(Modifier.height(20.dp))
-
                 // ── Header ────────────────────────────────────────────────
                 Text(
                     text  = "CADENCE",
@@ -276,15 +332,36 @@ fun PlayerScreen(viewModel: PlayerViewModel = hiltViewModel()) {
                     color = targetGlow,
                 )
 
-                Spacer(Modifier.height(28.dp))
+                Spacer(Modifier.height(12.dp))
 
-                // ── Scene name ────────────────────────────────────────────
-                Text(
-                    text      = confirmedScene?.displayName() ?: "Detecting…",
-                    style     = MaterialTheme.typography.headlineLarge,
-                    color     = TextPrimary,
-                    textAlign = TextAlign.Center,
-                )
+                // ── Scene name — tappable for reasoning modal ─────────────
+                Box(
+                    modifier         = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text      = confirmedScene?.displayName() ?: "Detecting…",
+                        style     = MaterialTheme.typography.headlineLarge,
+                        color     = TextPrimary,
+                        textAlign = TextAlign.Center,
+                        modifier  = if (isActive) Modifier.clickable { showReasoningModal = true } else Modifier,
+                    )
+                    if (isActive) {
+                        IconButton(
+                            onClick  = { showSceneOverride = true },
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .size(40.dp),
+                        ) {
+                            Icon(
+                                imageVector        = Icons.Default.Tune,
+                                contentDescription = "Override scene",
+                                tint               = targetGlow.copy(alpha = 0.5f),
+                                modifier           = Modifier.size(18.dp),
+                            )
+                        }
+                    }
+                }
 
                 candidateScene?.let { candidate ->
                     if (candidate != confirmedScene) {
@@ -302,13 +379,40 @@ fun PlayerScreen(viewModel: PlayerViewModel = hiltViewModel()) {
                     HrBadge(bpm = sensorState.heartRate, glowColor = targetGlow)
                 }
 
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(16.dp))
+
+                // ── HR drift adaptation banner ────────────────────────────
+                AnimatedVisibility(
+                    visible = isAdaptingToHrDrift,
+                    enter   = fadeIn() + slideInVertically { -20 },
+                    exit    = fadeOut() + slideOutVertically { -20 },
+                ) {
+                    GlassCard(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Icon(
+                                imageVector        = Icons.Default.MonitorHeart,
+                                contentDescription = null,
+                                tint               = targetGlow,
+                                modifier           = Modifier.size(16.dp),
+                            )
+                            Text(
+                                text  = "Heart rate shift detected — adapting music…",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = TextSecondary,
+                            )
+                        }
+                    }
+                }
 
                 // ── Hero waveform ─────────────────────────────────────────
                 Box(
                     contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .size(240.dp)
+                    modifier         = Modifier
+                        .size(200.dp)
                         .semantics {
                             contentDescription = when {
                                 isBuffering -> "Generating music"
@@ -318,17 +422,10 @@ fun PlayerScreen(viewModel: PlayerViewModel = hiltViewModel()) {
                         },
                 ) {
                     if (isBuffering) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(80.dp),
-                            color = targetGlow,
-                            strokeWidth = 3.dp,
-                        )
-                        Text(
-                            text  = "Synthesising\n($chunksReady/2)",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = TextSecondary,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(top = 96.dp),
+                        GenerationProgressArc(
+                            chunksReady       = chunksReady,
+                            generationStartMs = generationStartMs,
+                            glowColor         = targetGlow,
                         )
                     } else {
                         CircularWaveformVisualizer(
@@ -358,12 +455,38 @@ fun PlayerScreen(viewModel: PlayerViewModel = hiltViewModel()) {
                     modifier  = Modifier.fillMaxWidth(),
                 )
 
+                // ── Active adjustment pills ───────────────────────────────
+                if (!currentAdjustment.isEmpty()) {
+                    Spacer(Modifier.height(6.dp))
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment     = Alignment.CenterVertically,
+                        modifier              = Modifier.fillMaxWidth(),
+                    ) {
+                        items(buildAdjustmentHints(currentAdjustment)) { hint ->
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(targetGlow.copy(alpha = 0.15f))
+                                    .border(1.dp, targetGlow.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                            ) {
+                                Text(
+                                    text  = hint,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = targetGlow.copy(alpha = 0.85f),
+                                )
+                            }
+                        }
+                    }
+                }
+
                 Spacer(Modifier.height(12.dp))
 
                 // ── Controls ──────────────────────────────────────────────
                 Row(
-                    verticalAlignment      = Alignment.CenterVertically,
-                    horizontalArrangement  = Arrangement.spacedBy(28.dp),
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(28.dp),
                 ) {
                     IconButton(
                         onClick  = { viewModel.skipToPrevious() },
@@ -373,12 +496,11 @@ fun PlayerScreen(viewModel: PlayerViewModel = hiltViewModel()) {
                         Icon(
                             imageVector        = Icons.Default.SkipPrevious,
                             contentDescription = "Previous",
-                            tint = if (isPlaying) TextPrimary else TextTertiary,
+                            tint               = if (isPlaying) TextPrimary else TextTertiary,
                             modifier           = Modifier.size(30.dp),
                         )
                     }
 
-                    // Play / Stop
                     Button(
                         onClick = { if (isActive) viewModel.stop() else viewModel.startPlayback() },
                         enabled = !isBuffering,
@@ -391,7 +513,7 @@ fun PlayerScreen(viewModel: PlayerViewModel = hiltViewModel()) {
                                 else        -> targetGlow
                             },
                         ),
-                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 6.dp),
+                        elevation      = ButtonDefaults.buttonElevation(defaultElevation = 6.dp),
                         contentPadding = PaddingValues(0.dp),
                     ) {
                         Icon(
@@ -410,7 +532,7 @@ fun PlayerScreen(viewModel: PlayerViewModel = hiltViewModel()) {
                         Icon(
                             imageVector        = Icons.Default.SkipNext,
                             contentDescription = "Next",
-                            tint = if (isPlaying) TextPrimary else TextTertiary,
+                            tint               = if (isPlaying) TextPrimary else TextTertiary,
                             modifier           = Modifier.size(30.dp),
                         )
                     }
@@ -419,27 +541,158 @@ fun PlayerScreen(viewModel: PlayerViewModel = hiltViewModel()) {
                 Spacer(Modifier.height(16.dp))
 
                 // ── Feedback ──────────────────────────────────────────────
-                if (isPlaying && songParams != null) {
+                if (isActive) {
                     TrackFeedbackRow(
                         tasteMemory   = tasteMemory,
                         onThumbsUp    = { viewModel.thumbsUp() },
                         onThumbsDown  = { viewModel.thumbsDown() },
+                        onClearMemory = { viewModel.resetTasteMemory() },
                         glowColor     = targetGlow,
                     )
                 }
+            }
 
-                // ── Error banner ──────────────────────────────────────────
-                if (lastError != null && isActive) {
-                    Spacer(Modifier.height(12.dp))
-                    ErrorBanner(onRetry = { viewModel.retryGeneration() })
+            // ── Error banner — full-bleed amber at top ────────────────────
+            if (lastError != null && isActive) {
+                ErrorBanner(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(
+                            top   = innerPadding.calculateTopPadding() + 8.dp,
+                            start = 16.dp,
+                            end   = 16.dp,
+                        ),
+                    onRetry = { viewModel.retryGeneration() },
+                )
+            }
+
+            // ── Bottom panel ──────────────────────────────────────────────
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .imePadding()
+                    .padding(
+                        bottom = innerPadding.calculateBottomPadding() + 8.dp,
+                        start  = 24.dp,
+                        end    = 24.dp,
+                    ),
+            ) {
+                // Health access banner (shown when health permissions not granted)
+                AnimatedVisibility(
+                    visible = !hasHealthPermissions && !isActive && !healthBannerDismissed,
+                    enter   = fadeIn() + slideInVertically { 40 },
+                    exit    = fadeOut() + slideOutVertically { 40 },
+                ) {
+                    GlassCard(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp)
+                            .border(1.dp, WarningAmber.copy(alpha = 0.4f), RoundedCornerShape(16.dp)),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Icon(
+                                imageVector        = Icons.Default.MonitorHeart,
+                                contentDescription = null,
+                                tint               = WarningAmber,
+                                modifier           = Modifier.size(18.dp),
+                            )
+                            Text(
+                                text     = "Grant health access for better music personalisation",
+                                style    = MaterialTheme.typography.labelSmall,
+                                color    = TextSecondary,
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(
+                                onClick = { healthPermissionLauncher.launch(HEALTH_CONNECT_PERMISSIONS) },
+                                colors  = ButtonDefaults.textButtonColors(contentColor = WarningAmber),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                            ) {
+                                Text("Grant", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                            }
+                            IconButton(
+                                onClick  = { healthBannerDismissed = true },
+                                modifier = Modifier.size(28.dp),
+                            ) {
+                                Icon(
+                                    imageVector        = Icons.Default.Close,
+                                    contentDescription = "Dismiss",
+                                    tint               = TextTertiary,
+                                    modifier           = Modifier.size(14.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Next song generating strip
+                AnimatedVisibility(
+                    visible = isPreGenerating || showNextSongReady,
+                    enter   = fadeIn() + slideInVertically { 40 },
+                    exit    = fadeOut() + slideOutVertically { 40 },
+                ) {
+                    GlassCard(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            if (isPreGenerating) {
+                                val dotAlpha by rememberInfiniteTransition(label = "dot").animateFloat(
+                                    initialValue = 0.4f,
+                                    targetValue  = 1f,
+                                    animationSpec = infiniteRepeatable(tween(800), RepeatMode.Reverse),
+                                    label        = "dotAlpha",
+                                )
+                                Canvas(modifier = Modifier.size(8.dp)) {
+                                    drawCircle(color = targetGlow.copy(alpha = dotAlpha))
+                                }
+                                Text(
+                                    text     = "Next song generating…",
+                                    style    = MaterialTheme.typography.labelSmall,
+                                    color    = TextSecondary,
+                                    modifier = Modifier.weight(1f),
+                                )
+                            } else {
+                                Icon(
+                                    imageVector        = Icons.Default.PlayArrow,
+                                    contentDescription = null,
+                                    tint               = GlowDefault,
+                                    modifier           = Modifier.size(14.dp),
+                                )
+                                Text(
+                                    text     = "Next song ready",
+                                    style    = MaterialTheme.typography.labelSmall,
+                                    color    = GlowDefault,
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (isActive) {
+                    AdjustmentPanel(
+                        adjustment       = currentAdjustment,
+                        expanded         = adjustmentExpanded,
+                        onExpandedChange = { adjustmentExpanded = it },
+                        onToggleGenre    = { viewModel.toggleGenre(it) },
+                        onClearGenres    = { viewModel.clearGenres() },
+                        onEnergyBias     = { viewModel.setEnergyBias(it) },
+                        onFreeText       = { viewModel.submitFreeText(it) },
+                    )
                 }
             }
 
             // Scene override menu
             DropdownMenu(
-                expanded          = showSceneOverride,
-                onDismissRequest  = { showSceneOverride = false },
-                modifier          = Modifier.background(Surface2),
+                expanded         = showSceneOverride,
+                onDismissRequest = { showSceneOverride = false },
+                modifier         = Modifier.background(Surface2),
             ) {
                 Scene.entries.forEach { s ->
                     DropdownMenuItem(
@@ -453,6 +706,38 @@ fun PlayerScreen(viewModel: PlayerViewModel = hiltViewModel()) {
             }
         }
     }
+
+    // ── AI Reasoning modal ────────────────────────────────────────────────
+    if (showReasoningModal) {
+        val modalSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = { showReasoningModal = false },
+            sheetState       = modalSheetState,
+            containerColor   = Surface1,
+            shape            = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 48.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text(
+                    text  = "WHY THIS MUSIC?",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = confirmedScene.glowColor(),
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+                AIReasoningPanel(
+                    metricsContext = metricsContext,
+                    mentalState    = mentalState,
+                    songParams     = songParams,
+                )
+            }
+        }
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -461,60 +746,120 @@ fun PlayerScreen(viewModel: PlayerViewModel = hiltViewModel()) {
 
 @Composable
 private fun BottomSheetContent(
-    sensorState: io.cadence.music.data.model.SensorState,
+    confirmedScene: Scene?,
+    sensorState: SensorState,
     metricsContext: String,
     mentalState: MentalState?,
     songParams: SongParams?,
     songHistory: List<GeneratedSong>,
+    tasteMemory: UserTasteMemory,
     isActive: Boolean,
     hasHealthPermissions: Boolean,
     healthDiagnostic: String?,
     isRefreshingBiometrics: Boolean,
     onRefreshBiometrics: () -> Unit,
     onGrantHealth: () -> Unit,
+    onExpand: () -> Unit,
+    onClearMemory: () -> Unit,
 ) {
-    // Peek label (always visible at 72dp sheet height)
+    val sceneGlow = confirmedScene.glowColor()
+
+    // ── Peek row — insight card, tappable to expand ───────────────────────
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp)
+            .clickable(onClick = onExpand)
+            .padding(horizontal = 24.dp)
             .padding(bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text(
-            text  = "BIOMETRICS & INSIGHTS",
-            style = MaterialTheme.typography.labelMedium,
-            color = TextTertiary,
-        )
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (!hasHealthPermissions) {
+        // Left: scene name + HR
+        Row(
+            verticalAlignment     = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier              = Modifier.weight(1f),
+        ) {
+            AnimatedContent(
+                targetState = confirmedScene?.displayName() ?: "Detecting",
+                label       = "peekScene",
+            ) { sceneName ->
                 Text(
-                    text     = "Grant Health Access",
-                    style    = MaterialTheme.typography.labelSmall,
-                    color    = WarningAmber,
-                    modifier = Modifier
-                        .clickable(onClick = onGrantHealth)
-                        .padding(end = 8.dp),
+                    text       = sceneName,
+                    style      = MaterialTheme.typography.labelMedium,
+                    color      = sceneGlow,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines   = 1,
                 )
             }
+            if (sensorState.heartRate > 0) {
+                Text(
+                    text  = "♥ ${sensorState.heartRate}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = sceneGlow.copy(alpha = 0.65f),
+                )
+            }
+        }
+
+        // Right: top-2 style tags + chevron + refresh
+        Row(
+            verticalAlignment     = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            if (songParams?.descriptions != null) {
+                val topTags = songParams.descriptions
+                    .split(",", ";")
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+                    .take(2)
+                topTags.forEach { tag ->
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(sceneGlow.copy(alpha = 0.12f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                    ) {
+                        Text(
+                            text  = tag,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = sceneGlow.copy(alpha = 0.75f),
+                        )
+                    }
+                }
+            }
+            if (!hasHealthPermissions) {
+                Icon(
+                    imageVector        = Icons.Default.MonitorHeart,
+                    contentDescription = "Grant health access",
+                    tint               = WarningAmber.copy(alpha = 0.7f),
+                    modifier           = Modifier
+                        .size(16.dp)
+                        .clickable(onClick = onGrantHealth),
+                )
+            }
+            Icon(
+                imageVector        = Icons.Default.ExpandLess,
+                contentDescription = "Expand",
+                tint               = TextTertiary,
+                modifier           = Modifier.size(16.dp),
+            )
             IconButton(
                 onClick  = onRefreshBiometrics,
                 enabled  = !isRefreshingBiometrics,
-                modifier = Modifier.size(24.dp),
+                modifier = Modifier.size(36.dp),
             ) {
                 if (isRefreshingBiometrics) {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
+                        modifier    = Modifier.size(14.dp),
                         strokeWidth = 2.dp,
-                        color = GlowDefault.copy(alpha = 0.6f),
+                        color       = GlowDefault.copy(alpha = 0.6f),
                     )
                 } else {
                     Icon(
                         imageVector        = Icons.Default.Refresh,
                         contentDescription = "Refresh biometrics",
                         tint               = GlowDefault.copy(alpha = 0.6f),
-                        modifier           = Modifier.size(16.dp),
+                        modifier           = Modifier.size(14.dp),
                     )
                 }
             }
@@ -525,7 +870,7 @@ private fun BottomSheetContent(
         modifier = Modifier
             .fillMaxWidth()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp)
+            .padding(horizontal = 24.dp)
             .padding(bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -541,9 +886,9 @@ private fun BottomSheetContent(
                 (sensorState.heartRate == 0 && sensorState.stepsToday == 0L && sensorState.caloriesBurned == 0f)
             if (looksEmpty && hasHealthPermissions) {
                 Text(
-                    text      = "If you use Samsung Health, open it → Settings → Health Connect → enable sharing for Heart Rate, Steps, Exercise, and Calories.",
-                    style     = MaterialTheme.typography.labelSmall,
-                    color     = WarningAmber.copy(alpha = 0.7f),
+                    text       = "If you use Samsung Health, open it → Settings → Health Connect → enable sharing for Heart Rate, Steps, Exercise, and Calories.",
+                    style      = MaterialTheme.typography.labelSmall,
+                    color      = WarningAmber.copy(alpha = 0.7f),
                     lineHeight = 14.sp,
                 )
             }
@@ -556,19 +901,19 @@ private fun BottomSheetContent(
             color = TextTertiary,
         )
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier              = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             StatCard(
-                label = "HEART RATE",
-                value = if (sensorState.heartRate > 0) "${sensorState.heartRate}" else "—",
-                unit  = "BPM",
+                label    = "HEART RATE",
+                value    = if (sensorState.heartRate > 0) "${sensorState.heartRate}" else "—",
+                unit     = "BPM",
                 modifier = Modifier.weight(1f),
             )
             StatCard(
-                label = "READINESS",
-                value = if (sensorState.readinessScore > 0) "${sensorState.readinessScore}" else "—",
-                unit  = if (sensorState.readinessScore > 0) "/100" else "",
+                label    = "READINESS",
+                value    = if (sensorState.readinessScore > 0) "${sensorState.readinessScore}" else "—",
+                unit     = if (sensorState.readinessScore > 0) "/100" else "",
                 modifier = Modifier.weight(1f),
             )
         }
@@ -581,55 +926,55 @@ private fun BottomSheetContent(
         }
 
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier              = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             StatCard(
-                label = "STEPS",
-                value = if (sensorState.stepsToday > 0) "${sensorState.stepsToday}" else "—",
-                unit  = "Today",
+                label    = "STEPS",
+                value    = if (sensorState.stepsToday > 0) "${sensorState.stepsToday}" else "—",
+                unit     = "Today",
                 modifier = Modifier.weight(1f),
             )
             StatCard(
-                label = "ACTIVE",
-                value = if (sensorState.activityMinutesToday > 0) "${sensorState.activityMinutesToday}" else "—",
-                unit  = "MINS",
+                label    = "ACTIVE",
+                value    = if (sensorState.activityMinutesToday > 0) "${sensorState.activityMinutesToday}" else "—",
+                unit     = "MINS",
                 modifier = Modifier.weight(1f),
             )
         }
 
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier              = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             StatCard(
-                label = "KCAL",
-                value = if (sensorState.caloriesBurned > 0f) "${"%.0f".format(sensorState.caloriesBurned)}" else "—",
-                unit  = "BURNED",
+                label    = "KCAL",
+                value    = if (sensorState.caloriesBurned > 0f) "${"%.0f".format(sensorState.caloriesBurned)}" else "—",
+                unit     = "BURNED",
                 modifier = Modifier.weight(1f),
             )
             StatCard(
-                label = "SLEEP",
-                value = if (sensorState.sleepScore > 0) "${sensorState.sleepScore}" else "—",
-                unit  = if (sensorState.sleepScore > 0) "/100" else "",
+                label    = "SLEEP",
+                value    = if (sensorState.sleepScore > 0) "${sensorState.sleepScore}" else "—",
+                unit     = if (sensorState.sleepScore > 0) "/100" else "",
                 modifier = Modifier.weight(1f),
             )
         }
 
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier              = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             StatCard(
-                label = "WEATHER",
-                value = sensorState.weather,
-                unit  = "",
+                label    = "WEATHER",
+                value    = sensorState.weather,
+                unit     = "",
                 modifier = Modifier.weight(1f),
             )
             StatCard(
-                label = "GPS",
-                value = "${"%.1f".format(sensorState.speedKmh)}",
-                unit  = "KM/H",
+                label    = "GPS",
+                value    = "${"%.1f".format(sensorState.speedKmh)}",
+                unit     = "KM/H",
                 modifier = Modifier.weight(1f),
             )
         }
@@ -657,9 +1002,9 @@ private fun BottomSheetContent(
             val visibleTracks  = if (tracksExpanded) songHistory else songHistory.take(3)
 
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier              = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+                verticalAlignment     = Alignment.CenterVertically,
             ) {
                 Text(
                     text  = "GENERATED TRACKS",
@@ -680,6 +1025,17 @@ private fun BottomSheetContent(
                 GeneratedTrackCard(song = song, modifier = Modifier.fillMaxWidth())
             }
         }
+
+        // ── Taste profile ────────────────────────────────────────────────
+        HorizontalDivider(
+            color    = Color.White.copy(alpha = 0.07f),
+            modifier = Modifier.padding(vertical = 4.dp),
+        )
+        TasteProfileSection(
+            tasteMemory    = tasteMemory,
+            glowColor      = confirmedScene.glowColor(),
+            onClearMemory  = onClearMemory,
+        )
     }
 }
 
@@ -706,12 +1062,14 @@ private fun HrBadge(bpm: Int, glowColor: Color) {
 
 @Composable
 private fun StyleTagRow(descriptions: String, glowColor: Color) {
-    Row(
+    val tags = remember(descriptions) {
+        descriptions.split(",", ";").map { it.trim() }.filter { it.isNotBlank() }.take(5)
+    }
+    LazyRow(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment     = Alignment.CenterVertically,
     ) {
-        descriptions.split(",", ";", " ").map { it.trim() }.filter { it.isNotBlank() }.take(5).forEach { tag ->
+        items(tags) { tag ->
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(12.dp))
@@ -749,9 +1107,9 @@ fun SongTimeline(
 
     Column(modifier = modifier) {
         Slider(
-            value = fraction,
-            onValueChange = { v ->
-                isDragging = true
+            value             = fraction,
+            onValueChange     = { v ->
+                isDragging   = true
                 dragFraction = v
             },
             onValueChangeFinished = {
@@ -760,17 +1118,17 @@ fun SongTimeline(
             },
             enabled = isEnabled && progress.durationMs > 0,
             colors  = SliderDefaults.colors(
-                thumbColor             = glowColor,
-                activeTrackColor       = glowColor,
-                inactiveTrackColor     = Color.White.copy(alpha = 0.2f),
-                disabledThumbColor     = Color.White.copy(alpha = 0.2f),
+                thumbColor                 = glowColor,
+                activeTrackColor           = glowColor,
+                inactiveTrackColor         = Color.White.copy(alpha = 0.2f),
+                disabledThumbColor         = Color.White.copy(alpha = 0.2f),
                 disabledActiveTrackColor   = Color.White.copy(alpha = 0.15f),
                 disabledInactiveTrackColor = Color.White.copy(alpha = 0.1f),
             ),
             modifier = Modifier.fillMaxWidth(),
         )
         Row(
-            modifier = Modifier
+            modifier              = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 4.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -794,10 +1152,15 @@ fun TrackFeedbackRow(
     tasteMemory: UserTasteMemory,
     onThumbsUp: () -> Unit,
     onThumbsDown: () -> Unit,
+    onClearMemory: () -> Unit = {},
     modifier: Modifier = Modifier,
     glowColor: Color = GlowDefault,
 ) {
     var flash by remember { mutableStateOf<String?>(null) }
+    var bounceUp by remember { mutableStateOf(false) }
+    var bounceDown by remember { mutableStateOf(false) }
+    var confirmMessage by remember { mutableStateOf<String?>(null) }
+    var showClearConfirm by remember { mutableStateOf(false) }
 
     LaunchedEffect(flash) {
         if (flash != null) {
@@ -806,82 +1169,195 @@ fun TrackFeedbackRow(
         }
     }
 
-    Row(
-        modifier              = modifier,
-        verticalAlignment     = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center,
-    ) {
-        IconButton(
-            onClick  = { flash = "down"; onThumbsDown() },
-            modifier = Modifier.size(44.dp),
-        ) {
-            Icon(
-                imageVector        = Icons.Default.ThumbDown,
-                contentDescription = "Dislike",
-                tint = if (flash == "down") FeedbackDislike else FeedbackNeutral,
-                modifier           = Modifier.size(22.dp),
-            )
+    LaunchedEffect(confirmMessage) {
+        if (confirmMessage != null) {
+            delay(2000)
+            confirmMessage = null
         }
+    }
 
-        Spacer(Modifier.width(12.dp))
+    val thumbDownTint by animateColorAsState(
+        targetValue   = if (flash == "down") FeedbackDislike else FeedbackNeutral,
+        animationSpec = tween(300),
+        label         = "thumbDownTint",
+    )
+    val thumbUpTint by animateColorAsState(
+        targetValue   = if (flash == "up") FeedbackLike else FeedbackNeutral,
+        animationSpec = tween(300),
+        label         = "thumbUpTint",
+    )
+    val scaleDown by animateFloatAsState(
+        targetValue   = if (bounceDown) 1.4f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+        label         = "scaleDown",
+        finishedListener = { bounceDown = false },
+    )
+    val scaleUp by animateFloatAsState(
+        targetValue   = if (bounceUp) 1.4f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+        label         = "scaleUp",
+        finishedListener = { bounceUp = false },
+    )
 
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text  = "RATE THIS TRACK",
-                style = MaterialTheme.typography.labelSmall,
-                color = TextTertiary,
-            )
-            if (tasteMemory.feedbackCount > 0) {
+    Column(
+        modifier            = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Row(
+            verticalAlignment     = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            IconButton(
+                onClick  = {
+                    flash = "down"
+                    bounceDown = true
+                    confirmMessage = "Skipping this style"
+                    onThumbsDown()
+                },
+                modifier = Modifier.size(44.dp),
+            ) {
+                Icon(
+                    imageVector        = Icons.Default.ThumbDown,
+                    contentDescription = "Dislike",
+                    tint               = thumbDownTint,
+                    modifier           = Modifier.size(22.dp).scale(scaleDown),
+                )
+            }
+
+            Spacer(Modifier.width(12.dp))
+
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text  = "${tasteMemory.feedbackCount} signal${if (tasteMemory.feedbackCount == 1) "" else "s"} learned",
+                    text  = "RATE THIS TRACK",
                     style = MaterialTheme.typography.labelSmall,
-                    color = glowColor.copy(alpha = 0.5f),
-                    fontSize = 9.sp,
+                    color = TextTertiary,
+                )
+                if (tasteMemory.feedbackCount > 0) {
+                    Text(
+                        text     = "${tasteMemory.feedbackCount} signal${if (tasteMemory.feedbackCount == 1) "" else "s"} learned",
+                        style    = MaterialTheme.typography.labelSmall,
+                        color    = glowColor.copy(alpha = 0.5f),
+                        fontSize = 9.sp,
+                    )
+                }
+                // Confirmation toast
+                if (confirmMessage != null) {
+                    Text(
+                        text  = confirmMessage!!,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (confirmMessage!!.contains("Got it")) FeedbackLike else FeedbackDislike,
+                        fontSize = 9.sp,
+                    )
+                }
+            }
+
+            Spacer(Modifier.width(12.dp))
+
+            IconButton(
+                onClick  = {
+                    flash = "up"
+                    bounceUp = true
+                    confirmMessage = "Got it — learning your taste"
+                    onThumbsUp()
+                },
+                modifier = Modifier.size(44.dp),
+            ) {
+                Icon(
+                    imageVector        = Icons.Default.ThumbUp,
+                    contentDescription = "Like",
+                    tint               = thumbUpTint,
+                    modifier           = Modifier.size(22.dp).scale(scaleUp),
                 )
             }
         }
 
-        Spacer(Modifier.width(12.dp))
-
-        IconButton(
-            onClick  = { flash = "up"; onThumbsUp() },
-            modifier = Modifier.size(44.dp),
-        ) {
-            Icon(
-                imageVector        = Icons.Default.ThumbUp,
-                contentDescription = "Like",
-                tint = if (flash == "up") FeedbackLike else FeedbackNeutral,
-                modifier           = Modifier.size(22.dp),
-            )
+        if (tasteMemory.feedbackCount > 0) {
+            if (showClearConfirm) {
+                Row(
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    Text(
+                        text  = "Wipe all taste memory?",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextTertiary,
+                    )
+                    Text(
+                        text     = "CONFIRM",
+                        style    = MaterialTheme.typography.labelSmall,
+                        color    = io.cadence.music.ui.theme.ErrorRed,
+                        modifier = Modifier
+                            .border(
+                                width = 1.dp,
+                                color = io.cadence.music.ui.theme.ErrorRed.copy(alpha = 0.5f),
+                                shape = RoundedCornerShape(4.dp),
+                            )
+                            .clickable {
+                                onClearMemory()
+                                showClearConfirm = false
+                            }
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                    )
+                    Text(
+                        text     = "Cancel",
+                        style    = MaterialTheme.typography.labelSmall,
+                        color    = TextTertiary,
+                        modifier = Modifier.clickable { showClearConfirm = false },
+                    )
+                }
+            } else {
+                TextButton(
+                    onClick        = { showClearConfirm = true },
+                    modifier       = Modifier.height(28.dp),
+                    colors         = ButtonDefaults.textButtonColors(contentColor = TextTertiary),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                ) {
+                    Text("Clear taste memory", style = MaterialTheme.typography.labelSmall)
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun ErrorBanner(onRetry: () -> Unit) {
-    GlassCard(modifier = Modifier.fillMaxWidth()) {
+private fun ErrorBanner(modifier: Modifier = Modifier, onRetry: () -> Unit) {
+    val alpha by rememberInfiniteTransition(label = "errorPulse").animateFloat(
+        initialValue  = 0.88f,
+        targetValue   = 1f,
+        animationSpec = infiniteRepeatable(
+            animation  = tween(1200),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "errorAlpha",
+    )
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(WarningAmber.copy(alpha = alpha)),
+    ) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            modifier              = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment     = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Icon(
                 imageVector        = Icons.Default.Warning,
                 contentDescription = null,
-                tint               = io.cadence.music.ui.theme.ErrorRed,
+                tint               = Color.Black,
                 modifier           = Modifier.size(18.dp),
             )
             Text(
                 text     = "Generation failed — tap retry",
                 style    = MaterialTheme.typography.bodySmall,
-                color    = io.cadence.music.ui.theme.ErrorRed,
+                color    = Color.Black,
                 modifier = Modifier.weight(1f),
             )
             TextButton(
                 onClick = onRetry,
-                colors  = ButtonDefaults.textButtonColors(contentColor = GlowDefault),
+                colors  = ButtonDefaults.textButtonColors(contentColor = Color.Black),
             ) {
-                Text("Retry", style = MaterialTheme.typography.labelSmall)
+                Text("Retry", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -896,9 +1372,9 @@ private fun AIReasoningPanel(
     var expanded by remember { mutableStateOf(false) }
 
     Text(
-        text  = "AI REASONING CHAIN",
-        style = MaterialTheme.typography.labelSmall,
-        color = TextTertiary,
+        text     = "AI REASONING CHAIN",
+        style    = MaterialTheme.typography.labelSmall,
+        color    = TextTertiary,
         modifier = Modifier.padding(bottom = 8.dp),
     )
 
@@ -910,14 +1386,14 @@ private fun AIReasoningPanel(
                 .padding(16.dp),
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier              = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+                verticalAlignment     = Alignment.CenterVertically,
             ) {
                 Text(
-                    text  = "INPUT: BIOMETRIC CONTEXT",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = GlowDefault,
+                    text       = "INPUT: BIOMETRIC CONTEXT",
+                    style      = MaterialTheme.typography.labelSmall,
+                    color      = GlowDefault,
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
@@ -941,9 +1417,9 @@ private fun AIReasoningPanel(
             )
 
             Text(
-                text  = "ESTIMATION: MENTAL STATE",
-                style = MaterialTheme.typography.labelSmall,
-                color = GlowDefault,
+                text       = "ESTIMATION: MENTAL STATE",
+                style      = MaterialTheme.typography.labelSmall,
+                color      = GlowDefault,
                 fontWeight = FontWeight.Bold,
             )
             Spacer(Modifier.height(6.dp))
@@ -963,20 +1439,20 @@ private fun AIReasoningPanel(
             )
 
             Text(
-                text  = "RECOMMENDATION: MUSIC STYLES",
-                style = MaterialTheme.typography.labelSmall,
-                color = GlowDefault,
+                text       = "RECOMMENDATION: MUSIC STYLES",
+                style      = MaterialTheme.typography.labelSmall,
+                color      = GlowDefault,
                 fontWeight = FontWeight.Bold,
             )
             Spacer(Modifier.height(6.dp))
             if (songParams != null) {
                 Text(
-                    text     = "Style: ${songParams.descriptions ?: "none"}",
-                    style    = MaterialTheme.typography.bodySmall,
-                    color    = TextPrimary,
+                    text       = "Style: ${songParams.descriptions ?: "none"}",
+                    style      = MaterialTheme.typography.bodySmall,
+                    color      = TextPrimary,
                     fontWeight = FontWeight.SemiBold,
-                    maxLines = if (expanded) Int.MAX_VALUE else 1,
-                    overflow = TextOverflow.Ellipsis,
+                    maxLines   = if (expanded) Int.MAX_VALUE else 1,
+                    overflow   = TextOverflow.Ellipsis,
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
@@ -1027,17 +1503,15 @@ fun StatCard(
 ) {
     Surface(
         modifier = modifier.border(
-            width  = 1.dp,
-            color  = Color.White.copy(alpha = 0.07f),
-            shape  = RoundedCornerShape(14.dp),
+            width = 1.dp,
+            color = Color.White.copy(alpha = 0.07f),
+            shape = RoundedCornerShape(14.dp),
         ),
-        color  = Surface1,
-        shape  = RoundedCornerShape(14.dp),
+        color          = Surface1,
+        shape          = RoundedCornerShape(14.dp),
         tonalElevation = 1.dp,
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-        ) {
+        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
             Text(
                 text  = label,
                 style = MaterialTheme.typography.labelSmall,
@@ -1070,6 +1544,7 @@ fun StatCard(
 @Composable
 fun GlassCard(
     modifier: Modifier = Modifier,
+    backgroundColor: Color = Color.White.copy(alpha = 0.05f),
     content: @Composable () -> Unit,
 ) {
     Surface(
@@ -1080,7 +1555,7 @@ fun GlassCard(
             ),
             shape = RoundedCornerShape(16.dp),
         ),
-        color          = Color.White.copy(alpha = 0.05f),
+        color          = backgroundColor,
         shape          = RoundedCornerShape(16.dp),
         tonalElevation = 2.dp,
     ) { content() }
@@ -1096,8 +1571,8 @@ fun GeneratedTrackCard(song: GeneratedSong, modifier: Modifier = Modifier) {
                 .fillMaxWidth(),
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
+                modifier              = Modifier.fillMaxWidth(),
+                verticalAlignment     = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Text(
@@ -1109,12 +1584,12 @@ fun GeneratedTrackCard(song: GeneratedSong, modifier: Modifier = Modifier) {
                     maxLines   = 2,
                 )
                 Text(
-                    text      = song.params.descriptions ?: "—",
-                    style     = MaterialTheme.typography.bodySmall,
-                    color     = TextPrimary,
-                    maxLines  = 1,
-                    overflow  = TextOverflow.Ellipsis,
-                    modifier  = Modifier.weight(1f),
+                    text     = song.params.descriptions ?: "—",
+                    style    = MaterialTheme.typography.bodySmall,
+                    color    = TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
                 )
                 Text(
                     text  = timeAgo(song.generatedAt),
@@ -1160,32 +1635,567 @@ fun GeneratedTrackCard(song: GeneratedSong, modifier: Modifier = Modifier) {
     }
 }
 
+// ── Mental State — visual dot-track scales ────────────────────────────────
+
 @Composable
 fun MentalStateRow(ms: MentalState) {
-    val valenceStr = ms.valence?.let { v -> if (v >= 0) "+$v" else "$v" } ?: "—"
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(modifier = Modifier.fillMaxWidth()) {
+            MentalMetricBar(
+                label    = "AROUSAL",
+                value    = ms.arousal,
+                max      = 10,
+                color    = GlowRunning,
+                modifier = Modifier.weight(1f),
+            )
+            ValenceBar(
+                value    = ms.valence,
+                modifier = Modifier.weight(1f),
+            )
+            MentalMetricBar(
+                label    = "STRESS",
+                value    = ms.stress,
+                max      = 10,
+                color    = GlowTraffic,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        Row(modifier = Modifier.fillMaxWidth()) {
+            MentalMetricBar(
+                label    = "ENERGY",
+                value    = ms.energy,
+                max      = 10,
+                color    = GlowWalking,
+                modifier = Modifier.weight(1f),
+            )
+            MentalMetricBar(
+                label    = "FOCUS",
+                value    = ms.focus,
+                max      = 10,
+                color    = GlowCommuting,
+                modifier = Modifier.weight(1f),
+            )
+            ms.mood?.let { mood ->
+                Column(
+                    modifier            = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        text     = "MOOD",
+                        style    = MaterialTheme.typography.labelSmall,
+                        color    = TextTertiary,
+                        fontSize = 9.sp,
+                    )
+                    Text(
+                        text      = mood,
+                        style     = MaterialTheme.typography.bodySmall,
+                        color     = TextSecondary,
+                        fontStyle = FontStyle.Italic,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            } ?: Spacer(Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun MentalMetricBar(
+    label: String,
+    value: Int?,
+    max: Int = 10,
+    color: Color = GlowDefault,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier            = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
         Text(
-            text  = "Arousal: ${ms.arousal ?: "—"}/10   Valence: $valenceStr/5   Stress: ${ms.stress ?: "—"}/10",
-            style = MaterialTheme.typography.bodySmall,
-            color = TextPrimary,
+            text     = label,
+            style    = MaterialTheme.typography.labelSmall,
+            color    = TextTertiary,
+            fontSize = 9.sp,
         )
-        Text(
-            text  = "Energy: ${ms.energy ?: "—"}/10   Focus: ${ms.focus ?: "—"}/10",
-            style = MaterialTheme.typography.bodySmall,
-            color = TextPrimary,
-        )
-        ms.mood?.let { mood ->
+        Spacer(Modifier.height(3.dp))
+        if (value != null) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                verticalAlignment     = Alignment.CenterVertically,
+            ) {
+                for (i in 1..max) {
+                    Box(
+                        modifier = Modifier
+                            .size(5.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (i <= value) color.copy(alpha = 0.85f)
+                                else color.copy(alpha = 0.15f)
+                            ),
+                    )
+                }
+            }
             Text(
-                text      = "Mood: $mood",
-                style     = MaterialTheme.typography.bodySmall,
-                color     = TextSecondary,
-                fontStyle = FontStyle.Italic,
+                text     = "$value",
+                style    = MaterialTheme.typography.labelSmall,
+                color    = TextSecondary,
+                fontSize = 9.sp,
+            )
+        } else {
+            Text(
+                text  = "—",
+                style = MaterialTheme.typography.bodySmall,
+                color = TextTertiary,
             )
         }
     }
 }
 
-// ── Utilities ────────────────────────────────────────────────────────────
+@Composable
+private fun ValenceBar(value: Int?, modifier: Modifier = Modifier) {
+    Column(
+        modifier            = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text     = "VALENCE",
+            style    = MaterialTheme.typography.labelSmall,
+            color    = TextTertiary,
+            fontSize = 9.sp,
+        )
+        Spacer(Modifier.height(3.dp))
+        if (value != null) {
+            // -5..+5, 10 dots total (skip 0 centre)
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                verticalAlignment     = Alignment.CenterVertically,
+            ) {
+                for (i in -5..-1) {
+                    Box(
+                        modifier = Modifier
+                            .size(5.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (value <= i) FeedbackDislike.copy(alpha = 0.85f)
+                                else FeedbackDislike.copy(alpha = 0.15f)
+                            ),
+                    )
+                }
+                Spacer(Modifier.width(2.dp))
+                for (i in 1..5) {
+                    Box(
+                        modifier = Modifier
+                            .size(5.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (value >= i) FeedbackLike.copy(alpha = 0.85f)
+                                else FeedbackLike.copy(alpha = 0.15f)
+                            ),
+                    )
+                }
+            }
+            val valenceStr = if (value >= 0) "+$value" else "$value"
+            Text(
+                text     = valenceStr,
+                style    = MaterialTheme.typography.labelSmall,
+                color    = TextSecondary,
+                fontSize = 9.sp,
+            )
+        } else {
+            Text(
+                text  = "—",
+                style = MaterialTheme.typography.bodySmall,
+                color = TextTertiary,
+            )
+        }
+    }
+}
+
+// ── Taste Profile ─────────────────────────────────────────────────────────
+
+@Composable
+private fun TasteProfileSection(
+    tasteMemory: UserTasteMemory,
+    glowColor: Color,
+    onClearMemory: () -> Unit,
+) {
+    var showClearConfirm by remember { mutableStateOf(false) }
+
+    Row(
+        modifier              = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment     = Alignment.CenterVertically,
+    ) {
+        Text(
+            text  = "TASTE PROFILE",
+            style = MaterialTheme.typography.labelSmall,
+            color = TextTertiary,
+        )
+        if (tasteMemory.feedbackCount > 0) {
+            TextButton(
+                onClick        = { showClearConfirm = true },
+                colors         = ButtonDefaults.textButtonColors(contentColor = io.cadence.music.ui.theme.ErrorRed.copy(alpha = 0.7f)),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                modifier       = Modifier.height(28.dp),
+            ) {
+                Text("Reset memory", style = MaterialTheme.typography.labelSmall)
+            }
+        }
+    }
+
+    if (showClearConfirm) {
+        Spacer(Modifier.height(4.dp))
+        Row(
+            modifier              = Modifier.fillMaxWidth(),
+            verticalAlignment     = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text  = "Wipe all ${tasteMemory.feedbackCount} signals?",
+                style = MaterialTheme.typography.labelSmall,
+                color = TextTertiary,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text     = "CONFIRM",
+                style    = MaterialTheme.typography.labelSmall,
+                color    = io.cadence.music.ui.theme.ErrorRed,
+                modifier = Modifier
+                    .border(1.dp, io.cadence.music.ui.theme.ErrorRed.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+                    .clickable { onClearMemory(); showClearConfirm = false }
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+            )
+            Text(
+                text     = "Cancel",
+                style    = MaterialTheme.typography.labelSmall,
+                color    = TextTertiary,
+                modifier = Modifier.clickable { showClearConfirm = false },
+            )
+        }
+        Spacer(Modifier.height(4.dp))
+    }
+
+    if (tasteMemory.feedbackCount == 0) {
+        Text(
+            text      = "Rate tracks to teach Cadence your taste.",
+            style     = MaterialTheme.typography.bodySmall,
+            color     = TextTertiary,
+            fontStyle = FontStyle.Italic,
+        )
+        return
+    }
+
+    val topTags = tasteMemory.tagScores.entries
+        .sortedByDescending { it.value }
+        .take(6)
+
+    if (topTags.isEmpty()) return
+
+    GlassCard(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            topTags.forEach { (tag, score) ->
+                Row(
+                    modifier              = Modifier.fillMaxWidth(),
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text     = tag,
+                        style    = MaterialTheme.typography.labelSmall,
+                        color    = TextSecondary,
+                        modifier = Modifier.width(80.dp),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    val fillFraction = ((score + 1f) / 2f).coerceIn(0f, 1f)
+                    val barColor = when {
+                        score >= 0.3f  -> FeedbackLike
+                        score <= -0.3f -> FeedbackDislike
+                        else           -> TextTertiary
+                    }
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(Color.White.copy(alpha = 0.08f)),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .fillMaxWidth(fillFraction)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(barColor.copy(alpha = 0.7f)),
+                        )
+                    }
+                    Text(
+                        text      = "${"%.0f".format(score * 100)}%",
+                        style     = MaterialTheme.typography.labelSmall,
+                        color     = TextTertiary,
+                        modifier  = Modifier.width(36.dp),
+                        textAlign = TextAlign.End,
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Adjustment Panel
+// ═══════════════════════════════════════════════════════════════════════════
+
+private val GENRE_OPTIONS = listOf(
+    "jazz",
+    "electronic",
+    "pop",
+    "rock",
+    "ambient",
+    "folk",
+    "hip-hop",
+    "classical",
+)
+
+private fun buildAdjustmentHints(adjustment: UserMusicAdjustment): List<String> = buildList {
+    adjustment.genreOverrides.forEach { add(it.uppercase()) }
+    when {
+        adjustment.energyBias >= 1  -> add("+ENERGY")
+        adjustment.energyBias <= -1 -> add("-ENERGY")
+    }
+    if (adjustment.freeText != null) add("CUSTOM")
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun AdjustmentPanel(
+    adjustment: UserMusicAdjustment,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    onToggleGenre: (String) -> Unit,
+    onClearGenres: () -> Unit,
+    onEnergyBias: (Int) -> Unit,
+    onFreeText: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var freeTextValue by remember { mutableStateOf("") }
+    var sliderPosition by remember { mutableFloatStateOf(adjustment.energyBias.toFloat()) }
+    val focusManager = LocalFocusManager.current
+    val bringIntoViewRequester = remember { BringIntoViewRequester() }
+    val coroutineScope = rememberCoroutineScope()
+
+    // Clear keyboard when panel collapses
+    LaunchedEffect(expanded) {
+        if (!expanded) focusManager.clearFocus()
+    }
+
+    // Darken the card when expanded so text fields are readable without breaking the dark theme
+    val cardBackground by animateColorAsState(
+        targetValue   = if (expanded) Color(0xFF0E1117).copy(alpha = 0.92f)
+                        else Color.White.copy(alpha = 0.05f),
+        animationSpec = tween(300),
+        label         = "adjustCardBg",
+    )
+
+    GlassCard(modifier = modifier.fillMaxWidth(), backgroundColor = cardBackground) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+        ) {
+            // Header row — toggles expanded state
+            Row(
+                modifier              = Modifier
+                    .fillMaxWidth()
+                    .clickable { onExpandedChange(!expanded) },
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment     = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text  = "ADJUST MUSIC",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextTertiary,
+                )
+                val activeHints = buildAdjustmentHints(adjustment).joinToString(" · ")
+                Row(
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    if (activeHints.isNotEmpty()) {
+                        Text(
+                            text  = activeHints,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = GlowDefault,
+                        )
+                    }
+                    Text(
+                        text  = if (expanded) "▲" else "▼",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextTertiary,
+                    )
+                }
+            }
+
+            if (expanded) {
+                Spacer(Modifier.height(12.dp))
+
+                // Genre Chips
+                Text(
+                    text  = "GENRE",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextTertiary,
+                )
+                Spacer(Modifier.height(6.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    // "Auto" chip clears all genre overrides
+                    item {
+                        FilterChip(
+                            selected = adjustment.genreOverrides.isEmpty(),
+                            onClick  = { onClearGenres() },
+                            label    = { Text("Auto", style = MaterialTheme.typography.labelSmall) },
+                            colors   = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = GlowDefault.copy(alpha = 0.25f),
+                                selectedLabelColor     = GlowDefault,
+                                containerColor         = Color.Transparent,
+                                labelColor             = TextSecondary,
+                            ),
+                        )
+                    }
+                    items(GENRE_OPTIONS) { genre ->
+                        val selected = genre in adjustment.genreOverrides
+                        FilterChip(
+                            selected = selected,
+                            onClick  = { onToggleGenre(genre) },
+                            label    = {
+                                Text(
+                                    genre.replaceFirstChar { it.uppercase() },
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = GlowDefault.copy(alpha = 0.25f),
+                                selectedLabelColor     = GlowDefault,
+                                containerColor         = Color.Transparent,
+                                labelColor             = TextSecondary,
+                            ),
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                // Energy Slider
+                Row(
+                    modifier              = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text  = "ENERGY",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextTertiary,
+                    )
+                }
+                Row(
+                    modifier              = Modifier.fillMaxWidth(),
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text     = "Calmer",
+                        style    = MaterialTheme.typography.labelSmall,
+                        color    = TextTertiary,
+                        fontSize = 9.sp,
+                    )
+                    Slider(
+                        value                 = sliderPosition,
+                        onValueChange         = { sliderPosition = it },
+                        onValueChangeFinished = {
+                            val snapped = sliderPosition.toInt().coerceIn(-2, 2)
+                            sliderPosition = snapped.toFloat()
+                            onEnergyBias(snapped)
+                        },
+                        valueRange = -2f..2f,
+                        steps      = 3,
+                        modifier   = Modifier.weight(1f),
+                        colors     = SliderDefaults.colors(
+                            thumbColor         = GlowDefault,
+                            activeTrackColor   = GlowDefault,
+                            inactiveTrackColor = Color.White.copy(alpha = 0.15f),
+                        ),
+                    )
+                    Text(
+                        text     = "More",
+                        style    = MaterialTheme.typography.labelSmall,
+                        color    = TextTertiary,
+                        fontSize = 9.sp,
+                    )
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                // Free Text
+                OutlinedTextField(
+                    value         = freeTextValue,
+                    onValueChange = { freeTextValue = it },
+                    placeholder   = {
+                        Text(
+                            text  = "Try: 'more cinematic', 'add piano'…",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextTertiary,
+                        )
+                    },
+                    trailingIcon = {
+                        if (freeTextValue.isNotBlank()) {
+                            IconButton(
+                                onClick = {
+                                    onFreeText(freeTextValue)
+                                    freeTextValue = ""
+                                    focusManager.clearFocus()
+                                },
+                            ) {
+                                Icon(
+                                    imageVector        = Icons.AutoMirrored.Filled.Send,
+                                    contentDescription = "Apply",
+                                    tint               = GlowDefault,
+                                    modifier           = Modifier.size(18.dp),
+                                )
+                            }
+                        }
+                    },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(onSend = {
+                        if (freeTextValue.isNotBlank()) {
+                            onFreeText(freeTextValue)
+                            freeTextValue = ""
+                            focusManager.clearFocus()
+                        }
+                    }),
+                    singleLine = true,
+                    modifier   = Modifier
+                        .fillMaxWidth()
+                        .bringIntoViewRequester(bringIntoViewRequester)
+                        .onFocusChanged { focusState ->
+                            if (focusState.isFocused) {
+                                coroutineScope.launch { bringIntoViewRequester.bringIntoView() }
+                            }
+                        },
+                    textStyle = MaterialTheme.typography.bodySmall.copy(color = TextPrimary),
+                    colors    = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor   = GlowDefault,
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
+                        cursorColor          = GlowDefault,
+                    ),
+                )
+            }
+        }
+    }
+}
+
+// ── Utilities ──────────────────────────────────────────────────────────────
 
 private fun formatDuration(ms: Long): String {
     if (ms <= 0) return "0:00"

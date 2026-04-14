@@ -4,11 +4,13 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
+import io.cadence.music.data.adjustment.UserAdjustmentRepository
 import io.cadence.music.data.api.SongParams
 import io.cadence.music.data.model.GeneratedSong
 import io.cadence.music.data.model.MentalState
 import io.cadence.music.data.model.Scene
 import io.cadence.music.data.model.SensorState
+import io.cadence.music.data.model.UserMusicAdjustment
 import io.cadence.music.data.model.UserTasteMemory
 import io.cadence.music.data.taste.TasteMemoryRepository
 import io.cadence.music.data.sensor.LocationService
@@ -23,6 +25,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -38,6 +41,7 @@ class MusicOrchestrator @Inject constructor(
     private val sceneStateMachine: SceneStateMachine,
     private val bufferManager: AudioBufferManager,
     private val tasteMemoryRepository: TasteMemoryRepository,
+    private val userAdjustmentRepository: UserAdjustmentRepository,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
@@ -57,6 +61,9 @@ class MusicOrchestrator @Inject constructor(
 
     private val _playbackState = MutableStateFlow(PlaybackState.IDLE)
     val playbackState: StateFlow<PlaybackState> = _playbackState
+
+    private val _isAdaptingToHrDrift = MutableStateFlow(false)
+    val isAdaptingToHrDrift: StateFlow<Boolean> = _isAdaptingToHrDrift
 
     val chunksReady: StateFlow<Int> = bufferManager.chunksReady
     val currentMetricsContext: StateFlow<String> = bufferManager.currentMetricsContext
@@ -92,7 +99,13 @@ class MusicOrchestrator @Inject constructor(
                     if (currentHr > 0 && abs(currentHr - lastGeneratedHr) >= HR_DRIFT_THRESHOLD) {
                         Log.d(TAG, "HR drift: $lastGeneratedHr → $currentHr — repriming")
                         lastGeneratedHr = currentHr
+                        _isAdaptingToHrDrift.value = true
                         bufferManager.drainAndReprime(state, _currentScene.value)
+                        scope.launch {
+                            bufferManager.chunksReady.first { it > 0 }
+                            delay(3000)
+                            _isAdaptingToHrDrift.value = false
+                        }
                     }
                 }
             }
@@ -155,6 +168,8 @@ class MusicOrchestrator @Inject constructor(
 
     fun stop() {
         playbackStarted = false
+        _isAdaptingToHrDrift.value = false
+        sceneStateMachine.resetOverride()
         bufferJob?.cancel()
         bufferJob = null
         _playbackState.value = PlaybackState.IDLE
@@ -164,6 +179,7 @@ class MusicOrchestrator @Inject constructor(
         sceneJob = null
         // Cancel any in-flight generation so the server request is aborted immediately
         bufferManager.cancelGeneration()
+        userAdjustmentRepository.reset()
         sensorStateCollector.stop()
         context.stopService(Intent(context, LocationService::class.java))
         context.stopService(Intent(context, MusicPlayerService::class.java))
@@ -210,6 +226,30 @@ class MusicOrchestrator @Inject constructor(
 
     suspend fun checkHealthPermissions() {
         _hasHealthPermissions.value = sensorStateCollector.hasHeartRatePermission()
+    }
+
+    // ── User music adjustment ─────────────────────────────────────────────────
+
+    val currentAdjustment: StateFlow<UserMusicAdjustment> = userAdjustmentRepository.adjustment
+
+    fun toggleGenre(genre: String) {
+        userAdjustmentRepository.toggleGenre(genre)
+        if (playbackStarted) bufferManager.applyUserAdjustment(_currentSensorState.value, _currentScene.value)
+    }
+
+    fun clearGenres() {
+        userAdjustmentRepository.clearGenres()
+        if (playbackStarted) bufferManager.applyUserAdjustment(_currentSensorState.value, _currentScene.value)
+    }
+
+    fun setEnergyBias(delta: Int) {
+        userAdjustmentRepository.setEnergyBias(delta)
+        if (playbackStarted) bufferManager.applyUserAdjustment(_currentSensorState.value, _currentScene.value)
+    }
+
+    fun submitFreeText(text: String) {
+        userAdjustmentRepository.setFreeText(text)
+        if (playbackStarted) bufferManager.applyUserAdjustment(_currentSensorState.value, _currentScene.value)
     }
 
     // ── Taste memory ──────────────────────────────────────────────────────────

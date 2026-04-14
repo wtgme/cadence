@@ -23,8 +23,17 @@ interface GenerationRepository {
      */
     val translatedMentalState: StateFlow<MentalState?>
 
-    /** Step 1 — OpenRouter prompt translation. Always returns usable params (falls back on error). */
+    /** Step 1 (full) — Biometric context → MentalState → SongParams. Always returns usable params. */
     suspend fun translateMetrics(metricsContext: String): SongParams
+
+    /**
+     * Step 1b only — derives [SongParams] from an already-estimated [MentalState].
+     * Called for every song within a session so taste memory and user adjustments are
+     * reflected. [previousParams] is passed so the model can vary the style rather than
+     * repeating the same genre/instrument combination.
+     * Returns null if Step 1b fails — caller should fall back to [translateMetrics].
+     */
+    suspend fun translateMentalState(mentalState: MentalState, previousParams: SongParams? = null): SongParams?
 
     /**
      * Step 2 — Audio generation via the active [GenerationBackend].
