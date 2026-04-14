@@ -1,5 +1,6 @@
 package io.cadence.music.audio
 
+import io.cadence.music.data.adjustment.UserAdjustmentRepository
 import io.cadence.music.data.api.GenerationRepository
 import io.cadence.music.data.api.SongParams
 import io.cadence.music.data.api.StreamingChunk
@@ -49,6 +50,7 @@ class AudioBufferManagerTest {
             override val translatedSongParams = MutableStateFlow<SongParams?>(null)
             override val translatedMentalState = MutableStateFlow<MentalState?>(null)
             override suspend fun translateMetrics(ctx: String) = fakeSongParams
+            override suspend fun translateMentalState(mentalState: MentalState) = fakeSongParams
             override fun generateAudioStream(params: SongParams): Flow<StreamingChunk> =
                 streamBlock(++callCount)
         }
@@ -56,6 +58,7 @@ class AudioBufferManagerTest {
             musicRepository = repo,
             paramsBuilder = paramsBuilder,
             promptBuilder = PromptBuilder(),
+            userAdjustmentRepository = UserAdjustmentRepository(),
         )
     }
 

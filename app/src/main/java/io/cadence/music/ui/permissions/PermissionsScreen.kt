@@ -9,6 +9,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -243,6 +244,7 @@ fun PermissionsScreen(onAllGranted: () -> Unit) {
                             title       = "Location",
                             description = "Detects your speed and activity context.",
                             isGranted   = locationGranted,
+                            badge       = "Required",
                             onClick     = {
                                 locationLauncher.launch(
                                     arrayOf(
@@ -256,7 +258,7 @@ fun PermissionsScreen(onAllGranted: () -> Unit) {
                         PermissionFeatureItem(
                             icon        = Icons.Default.Favorite,
                             title       = "Health Data",
-                            description = "Heart rate, steps, sleep and readiness.",
+                            description = "Heart rate, steps, sleep and readiness. Enables BPM-aware generation and sleep-based mood calibration.",
                             isGranted   = healthGranted,
                             onClick     = { healthLauncher.launch(HEALTH_CONNECT_PERMISSIONS) },
                         )
@@ -267,6 +269,7 @@ fun PermissionsScreen(onAllGranted: () -> Unit) {
                                 title       = "Notifications",
                                 description = "Background playback controls.",
                                 isGranted   = notificationsGranted,
+                                badge       = "Optional",
                                 onClick     = {
                                     notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                                 },
@@ -326,6 +329,7 @@ private fun PermissionFeatureItem(
     title: String,
     description: String,
     isGranted: Boolean,
+    badge: String? = null,
     onClick: () -> Unit,
 ) {
     val borderColor = if (isGranted) GlowDefault.copy(alpha = 0.4f) else Color.White.copy(alpha = 0.08f)
@@ -337,9 +341,7 @@ private fun PermissionFeatureItem(
             .clip(RoundedCornerShape(16.dp))
             .background(bgColor)
             .border(1.dp, borderColor, RoundedCornerShape(16.dp))
-            .then(
-                if (!isGranted) Modifier.padding(0.dp) else Modifier
-            )
+            .clickable(onClick = if (isGranted) ({}) else onClick)
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -356,21 +358,43 @@ private fun PermissionFeatureItem(
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                imageVector     = icon,
+                imageVector        = icon,
                 contentDescription = null,
-                tint            = if (isGranted) GlowDefault else TextSecondary,
-                modifier        = Modifier.size(22.dp),
+                tint               = if (isGranted) GlowDefault else TextSecondary,
+                modifier           = Modifier.size(22.dp),
             )
         }
 
         // Text
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text  = title,
-                style = MaterialTheme.typography.titleMedium,
-                color = if (isGranted) TextPrimary else TextPrimary,
-                fontWeight = FontWeight.SemiBold,
-            )
+            Row(
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text       = title,
+                    style      = MaterialTheme.typography.titleMedium,
+                    color      = TextPrimary,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                if (badge != null) {
+                    val badgeColor = if (badge == "Required") Color(0xFFFF6B35) else TextTertiary
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(badgeColor.copy(alpha = 0.15f))
+                            .border(1.dp, badgeColor.copy(alpha = 0.4f), RoundedCornerShape(4.dp))
+                            .padding(horizontal = 5.dp, vertical = 2.dp),
+                    ) {
+                        Text(
+                            text  = badge.uppercase(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = badgeColor,
+                            fontSize = androidx.compose.ui.unit.TextUnit(8f, androidx.compose.ui.unit.TextUnitType.Sp),
+                        )
+                    }
+                }
+            }
             Text(
                 text  = description,
                 style = MaterialTheme.typography.bodySmall,

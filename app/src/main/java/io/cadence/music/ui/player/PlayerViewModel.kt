@@ -11,11 +11,13 @@ import io.cadence.music.data.model.GeneratedSong
 import io.cadence.music.data.model.MentalState
 import io.cadence.music.data.model.Scene
 import io.cadence.music.data.model.SensorState
+import io.cadence.music.data.model.UserMusicAdjustment
 import io.cadence.music.data.model.UserTasteMemory
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -61,8 +63,18 @@ class PlayerViewModel @Inject constructor(
     val tasteMemory: StateFlow<UserTasteMemory> = orchestrator.tasteMemory
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UserTasteMemory())
 
+    val currentAdjustment: StateFlow<UserMusicAdjustment> = orchestrator.currentAdjustment
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UserMusicAdjustment())
+
     private val _isRefreshingBiometrics = MutableStateFlow(false)
     val isRefreshingBiometrics: StateFlow<Boolean> = _isRefreshingBiometrics.asStateFlow()
+
+    /** Epoch-ms when the current BUFFERING phase started; 0 when not buffering. */
+    private val _generationStartMs = MutableStateFlow(0L)
+    val generationStartMs: StateFlow<Long> = _generationStartMs.asStateFlow()
+
+    val isAdaptingToHrDrift: StateFlow<Boolean> = orchestrator.isAdaptingToHrDrift
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     val hasHealthPermissions: StateFlow<Boolean> = orchestrator.hasHealthPermissions
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
@@ -73,6 +85,13 @@ class PlayerViewModel @Inject constructor(
     init {
         orchestrator.startDetection()
         viewModelScope.launch { orchestrator.checkHealthPermissions() }
+        viewModelScope.launch {
+            orchestrator.playbackState.collect { state ->
+                if (state == PlaybackState.BUFFERING) {
+                    _generationStartMs.value = System.currentTimeMillis()
+                }
+            }
+        }
     }
 
     fun startPlayback() = orchestrator.startPlayback()
@@ -98,6 +117,11 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun resetTasteMemory() = orchestrator.resetTasteMemory()
+
+    fun toggleGenre(genre: String) = orchestrator.toggleGenre(genre)
+    fun clearGenres() = orchestrator.clearGenres()
+    fun setEnergyBias(delta: Int) = orchestrator.setEnergyBias(delta)
+    fun submitFreeText(text: String) = orchestrator.submitFreeText(text)
 
     fun skipToNext() {
         // Auto-record how much of the current song was heard before skipping

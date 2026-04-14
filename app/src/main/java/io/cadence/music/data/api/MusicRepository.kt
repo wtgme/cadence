@@ -3,6 +3,7 @@ package io.cadence.music.data.api
 import android.util.Log
 import com.squareup.moshi.Moshi
 import io.cadence.music.BuildConfig
+import io.cadence.music.data.adjustment.UserAdjustmentRepository
 import io.cadence.music.data.model.MentalState
 import io.cadence.music.data.taste.TasteMemoryRepository
 import kotlinx.coroutines.Dispatchers
@@ -36,6 +37,7 @@ class MusicRepository @Inject constructor(
     private val moshi: Moshi,
     private val backend: GenerationBackend,
     private val tasteMemory: TasteMemoryRepository,
+    private val userAdjustmentRepository: UserAdjustmentRepository,
 ) : GenerationRepository {
 
     private val openRouterClient = okHttpClient.newBuilder()
@@ -112,20 +114,44 @@ class MusicRepository @Inject constructor(
         return parseMentalState(extractJson(rawText), rawText)
     }
 
+    // ── Step 1b only (public): cached MentalState → SongParams ───────────────
+
+    override suspend fun translateMentalState(mentalState: MentalState, previousParams: SongParams?): SongParams? =
+        withContext(Dispatchers.IO) {
+            val apiKey = BuildConfig.OPENROUTER_API_KEY
+            if (apiKey.isBlank()) return@withContext null
+            try {
+                translateMentalStateToParams(mentalState, apiKey, previousParams)?.also { publishTranslatedParams(it) }
+            } catch (e: Exception) {
+                Log.e(TAG, "Step 1b re-query failed (${e.javaClass.simpleName}: ${e.message})")
+                null
+            }
+        }
+
     // ── Step 1b: MentalState → SongParams ─────────────────────────────────────
 
-    private suspend fun translateMentalStateToParams(mentalState: MentalState, apiKey: String): SongParams? {
+    private suspend fun translateMentalStateToParams(mentalState: MentalState, apiKey: String, previousParams: SongParams? = null): SongParams? {
         val mentalStateJson = buildMentalStateJson(mentalState)
-        Log.d(TAG, "Step 1b: translating mental state to song params")
-        logChunked("Step 1b user", mentalStateJson)
-
         val tasteContext = tasteMemory.buildTasteContext()
+        val adjustmentHint = userAdjustmentRepository.adjustment.value.toPromptHint()
         val userMessage = buildString {
             append("User's current mental state:\n$mentalStateJson")
             if (tasteContext.isNotEmpty()) {
                 append("\n\n$tasteContext")
             }
+            if (adjustmentHint != null) {
+                append("\n\n$adjustmentHint")
+            }
+            if (previousParams != null) {
+                append("\n\nPrevious song: descriptions=\"${previousParams.descriptions}\"" +
+                    (previousParams.auto_prompt_audio_type?.let { ", auto_prompt_audio_type=\"$it\"" } ?: "") +
+                    ". Choose a noticeably different style — vary the primary genre or instruments.")
+            }
         }
+
+        Log.d(TAG, "Step 1b: translating mental state to song params")
+        logChunked("Step 1b system", SONG_PARAMS_FROM_MENTAL_STATE_SYSTEM)
+        logChunked("Step 1b user", userMessage)
 
         val rawText = callOpenRouter(
             apiKey = apiKey,
@@ -198,7 +224,10 @@ class MusicRepository @Inject constructor(
                         Log.d(TAG, "OpenRouter [$label] ← HTTP ${response.code} in ${elapsed}ms (${raw.length}B)")
                         val content = extractContent(raw)
                         if (content.isNullOrBlank()) {
-                            Log.w(TAG, "OpenRouter [$label] returned empty content — raw head: ${raw.take(300)}")
+                            // Log a window around the first non-whitespace character to reveal the actual content
+                            val firstNonWs = raw.indexOfFirst { !it.isWhitespace() }
+                            val snippet = if (firstNonWs >= 0) raw.substring(firstNonWs, minOf(firstNonWs + 400, raw.length)) else "(all whitespace)"
+                            Log.w(TAG, "OpenRouter [$label] empty content — first non-ws at $firstNonWs: $snippet")
                             null
                         } else {
                             Log.d(TAG, "OpenRouter [$label] content (${content.length}B): ${content.take(400)}")
@@ -331,12 +360,16 @@ class MusicRepository @Inject constructor(
 
     private fun logChunked(label: String, text: String) {
         if (text.isEmpty()) { Log.d(TAG, "$label [empty]"); return }
-        val chunkSize = 1000
+        val chunkSize = 800
         val total = (text.length + chunkSize - 1) / chunkSize
         var idx = 0; var chunk = 0
         while (idx < text.length) {
             val end = minOf(idx + chunkSize, text.length)
-            Log.d(TAG, "$label [${++chunk}/$total]\n${text.substring(idx, end)}")
+            // Use a prefix on each line so the tag stays visible in filtered logcat output
+            val body = text.substring(idx, end)
+                .lines()
+                .joinToString("\n") { "  $it" }
+            Log.d(TAG, "$label [${++chunk}/$total] $body")
             idx = end
         }
     }
@@ -347,7 +380,15 @@ class MusicRepository @Inject constructor(
         val root = moshi.adapter(Map::class.java).fromJson(raw) as? Map<String, Any> ?: return null
         val choices = root["choices"] as? List<Map<String, Any>> ?: return null
         val message = choices.firstOrNull()?.get("message") as? Map<String, Any> ?: return null
-        return (message["content"] as? String)?.trim()
+        val content = (message["content"] as? String)?.trim()
+        if (!content.isNullOrBlank()) return content
+        // Some reasoning models (e.g. nvidia/nemotron) return null content and put the
+        // actual response in a "reasoning" field. Fall back to it so we don't burn a retry.
+        val reasoning = (message["reasoning"] as? String)?.trim()
+        if (!reasoning.isNullOrBlank()) {
+            Log.d(TAG, "extractContent: content was empty — using reasoning field (${reasoning.length}B)")
+        }
+        return reasoning.takeIf { !it.isNullOrBlank() }
     }
 
     private fun extractJson(text: String): String {
@@ -367,7 +408,7 @@ class MusicRepository @Inject constructor(
         private val JSON = "application/json; charset=utf-8".toMediaType()
 
         private const val OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-        private const val OPENROUTER_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"
+        private const val OPENROUTER_MODEL = "openrouter/free"
         private const val MAX_ATTEMPTS = 3
 
         private val AUTO_PROMPT_TYPES = setOf(
@@ -470,6 +511,8 @@ class MusicRepository @Inject constructor(
               - Encode tempo through genre — do NOT use words like fast, slow, mid-tempo, driving, upbeat.
               - Include at least one instrument tag and at least one emotion tag.
               - descriptions must be a single comma-separated string, not an array.
+              - If a "Previous song" is provided: do not repeat the exact same primary genre AND
+                instrument combination. Stay within the same arousal tier but vary the sound.
         """.trimIndent()
 
         // ── Single-query fallback (original prompt) ────────────────────────────

@@ -1,6 +1,7 @@
 package io.cadence.music.audio
 
 import android.util.Log
+import io.cadence.music.data.adjustment.UserAdjustmentRepository
 import io.cadence.music.data.api.GenerationRepository
 import io.cadence.music.data.api.SongParams
 import io.cadence.music.data.api.StreamingChunk
@@ -43,6 +44,7 @@ class AudioBufferManager @Inject constructor(
     private val musicRepository: GenerationRepository,
     private val paramsBuilder: ParamsBuilder,
     private val promptBuilder: PromptBuilder,
+    private val userAdjustmentRepository: UserAdjustmentRepository,
 ) {
     // Holds pre-generated chunk files ready for ExoPlayer. Sized to buffer ~2 full songs
     // (each 90 s song produces ~3 chunks).
@@ -56,12 +58,26 @@ class AudioBufferManager @Inject constructor(
     @Volatile private var generationEpoch = 0L
 
     /**
-     * Params fetched from OpenRouter at the start of a session.
-     * Set to null by [prime] so the next generation re-queries OpenRouter.
-     * NOT cleared by [drainAndReprime] — context shifts mid-session reuse the
+     * Mental state estimated at session start (Step 1a). Set once by [prime]; cleared on
+     * [cancelGeneration] or the next [prime]. Survives [drainAndReprime] and
+     * [applyUserAdjustment] — the user's physiology doesn't change within a session.
+     */
+    @Volatile private var sessionMentalState: MentalState? = null
+
+    /**
+     * Params fetched from OpenRouter at the start of a session (or after a user adjustment).
+     * Set to null by [prime] and [applyUserAdjustment] so the next generation re-queries
+     * OpenRouter. NOT cleared by [drainAndReprime] — context shifts mid-session reuse the
      * same style rather than burning another OpenRouter call.
      */
     @Volatile private var sessionParams: SongParams? = null
+
+    /**
+     * Params of the last completed song. Passed to Step 1b so the model can vary the style
+     * rather than repeating the same genre/instrument combination. Cleared on [prime] so
+     * a fresh session doesn't carry over style from a previous one.
+     */
+    @Volatile private var previousSongParams: SongParams? = null
 
     /** Job for the currently active streaming request — cancelled by [drainAndReprime]. */
     @Volatile private var activeStreamingJob: Job? = null
@@ -127,11 +143,38 @@ class AudioBufferManager @Inject constructor(
         // Build metrics context for the Debug screen (instant — no network)
         _currentMetricsContext.value = promptBuilder.buildMetricsContext(state, scene)
 
-        // Fetch params from OpenRouter on the first song of a session; reuse for
-        // all subsequent songs. sessionParams is cleared by prime() on stop+start.
-        val params = sessionParams ?: paramsBuilder.buildParams(state, scene).also {
-            sessionParams = it
-            Log.d(TAG, "Worker: OpenRouter params fetched — descriptions=${it.descriptions} type=${it.auto_prompt_audio_type}")
+        // Three-path param resolution:
+        //   1. sessionParams != null → reuse (no network call; HR drift / scene change path)
+        //   2. sessionParams == null, sessionMentalState != null → Step 1b only (user adjustment path)
+        //   3. Both null → full re-query Step 1a + 1b (new session path)
+        val params: SongParams = when {
+            sessionParams != null -> sessionParams!!
+
+            sessionMentalState != null -> {
+                Log.d(TAG, "Worker: cached MentalState found — running Step 1b only")
+                val rederived = musicRepository.translateMentalState(sessionMentalState!!, previousSongParams)
+                if (rederived != null) {
+                    sessionParams = rederived
+                    Log.d(TAG, "Worker: Step 1b re-query done — descriptions=${rederived.descriptions}")
+                    rederived
+                } else {
+                    Log.w(TAG, "Worker: Step 1b re-query failed — falling back to full re-query")
+                    paramsBuilder.buildParams(state, scene).also {
+                        sessionMentalState = musicRepository.translatedMentalState.value
+                        sessionParams = it
+                        Log.d(TAG, "Worker: full re-query fallback done — descriptions=${it.descriptions}")
+                    }
+                }
+            }
+
+            else -> {
+                Log.d(TAG, "Worker: new session — running full re-query (Step 1a + 1b)")
+                paramsBuilder.buildParams(state, scene).also {
+                    sessionMentalState = musicRepository.translatedMentalState.value
+                    sessionParams = it
+                    Log.d(TAG, "Worker: OpenRouter params fetched — descriptions=${it.descriptions} type=${it.auto_prompt_audio_type}")
+                }
+            }
         }
         _currentSongParams.value = params
         _currentMentalState.value = musicRepository.translatedMentalState.value
@@ -165,10 +208,12 @@ class AudioBufferManager @Inject constructor(
                 }
                 StreamingChunk.Complete -> {
                     Log.d(TAG, "Worker: stream complete — auto-triggering next song")
-                    // Self-sustaining: immediately queue the next song request unless
-                    // context has changed (epoch mismatch means drainAndReprime already
-                    // sent a new request).
+                    // Save the just-finished params for Step 1b variety, then clear
+                    // sessionParams so the next song re-runs Step 1b with the latest
+                    // taste memory. sessionMentalState is kept — Step 1a is not repeated.
                     if (myEpoch == generationEpoch) {
+                        previousSongParams = params
+                        sessionParams = null
                         requestChannel.trySend(Unit)
                     }
                 }
@@ -188,15 +233,29 @@ class AudioBufferManager @Inject constructor(
     }
 
     /**
-     * Start a new playback session. Clears cached [SongParams] so the next generation
-     * re-queries OpenRouter with fresh biometrics. Does NOT bump the epoch.
+     * Start a new playback session. Clears both the cached [MentalState] and [SongParams]
+     * so the next generation runs the full Step 1a + 1b pipeline with fresh biometrics.
+     * Does NOT bump the epoch.
      */
     fun prime(sensorState: SensorState, scene: Scene?) {
-        sessionParams = null     // force OpenRouter re-query for this new session
+        sessionMentalState = null  // re-estimate mental state for the new session
+        sessionParams = null       // force full OpenRouter re-query
+        previousSongParams = null  // don't carry style history across sessions
         _currentMetricsContext.value = ""
         _currentSongParams.value = null
         _currentMentalState.value = null
         enqueueGeneration(sensorState, scene)
+    }
+
+    /**
+     * Applies a user-initiated music adjustment (genre, energy, free text).
+     * Clears [sessionParams] so the next generation re-queries OpenRouter with the updated
+     * preference hint injected via [UserAdjustmentRepository]. After that one call the result
+     * is cached as the new [sessionParams] for the rest of the session.
+     */
+    fun applyUserAdjustment(sensorState: SensorState, scene: Scene?) {
+        sessionParams = null
+        drainAndReprime(sensorState, scene)
     }
 
     /**
@@ -263,7 +322,9 @@ class AudioBufferManager @Inject constructor(
         }
         _chunksReady.value = 0
         _lastError.value = null
+        sessionMentalState = null
         sessionParams = null
+        previousSongParams = null
         Log.d(TAG, "Generation cancelled (epoch=$generationEpoch)")
     }
 

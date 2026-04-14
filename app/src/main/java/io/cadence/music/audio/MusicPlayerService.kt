@@ -140,6 +140,11 @@ class MusicPlayerService : MediaSessionService() {
         bufferManager.updateProgress(0L, 0L)
         enqueuedFiles.forEach { it.delete() }
         enqueuedFiles.clear()
+        // Stop and clear the player before releasing so ExoPlayer doesn't emit
+        // STATE_IDLE after mediaSession.release() has torn down its LegacyMessageQueue
+        // handler — which would produce an IllegalStateException on a "dead thread".
+        player.stop()
+        player.clearMediaItems()
         mediaSession.release()
         player.release()
         super.onDestroy()
