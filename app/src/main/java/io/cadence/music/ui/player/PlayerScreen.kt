@@ -941,7 +941,7 @@ private fun AIReasoningPanel(
             )
 
             Text(
-                text  = "STEP 1A: MENTAL STATE",
+                text  = "ESTIMATION: MENTAL STATE",
                 style = MaterialTheme.typography.labelSmall,
                 color = GlowDefault,
                 fontWeight = FontWeight.Bold,
@@ -963,7 +963,7 @@ private fun AIReasoningPanel(
             )
 
             Text(
-                text  = "STEP 1B: GENERATED PROMPT",
+                text  = "RECOMMENDATION: MUSIC STYLES",
                 style = MaterialTheme.typography.labelSmall,
                 color = GlowDefault,
                 fontWeight = FontWeight.Bold,
