@@ -15,19 +15,19 @@ class SceneDetectorTest {
         detector = SceneDetector()
     }
 
-    private fun stateWith(speedKmh: Float = 0f, heartRate: Int = 60) =
-        SensorState(speedKmh = speedKmh, heartRate = heartRate)
+    private fun stateWith(speedKmh: Float = 0f, heartRate: Int = 60, hourOfDay: Int = 10) =
+        SensorState(speedKmh = speedKmh, heartRate = heartRate, hourOfDay = hourOfDay)
+
+    // ── Commuting ──────────────────────────────────────────────────────────────
 
     @Test
-    fun `speed above driving threshold returns COMMUTING`() {
+    fun `speed at or above commuting threshold returns COMMUTING`() {
         assertEquals(Scene.COMMUTING, detector.detect(stateWith(speedKmh = 25f)))
         assertEquals(Scene.COMMUTING, detector.detect(stateWith(speedKmh = 60f)))
+        assertEquals(Scene.COMMUTING, detector.detect(stateWith(speedKmh = SceneDetector.COMMUTING_SPEED_THRESHOLD)))
     }
 
-    @Test
-    fun `speed at driving threshold returns COMMUTING`() {
-        assertEquals(Scene.COMMUTING, detector.detect(stateWith(speedKmh = SceneDetector.DRIVING_SPEED_THRESHOLD)))
-    }
+    // ── Running ────────────────────────────────────────────────────────────────
 
     @Test
     fun `speed in running range returns RUNNING`() {
@@ -42,26 +42,55 @@ class SceneDetectorTest {
     }
 
     @Test
-    fun `speed in walking range returns WALKING`() {
-        assertEquals(Scene.WALKING, detector.detect(stateWith(speedKmh = 3f)))
-        assertEquals(Scene.WALKING, detector.detect(stateWith(speedKmh = 5f)))
-    }
-
-    @Test
-    fun `slow movement below walking threshold returns STUCK_IN_TRAFFIC`() {
-        assertEquals(Scene.STUCK_IN_TRAFFIC, detector.detect(stateWith(speedKmh = 1.5f)))
-        assertEquals(Scene.STUCK_IN_TRAFFIC, detector.detect(stateWith(speedKmh = 2f)))
-    }
-
-    @Test
-    fun `stationary returns RESTING`() {
-        assertEquals(Scene.RESTING, detector.detect(stateWith(speedKmh = 0f)))
-        assertEquals(Scene.RESTING, detector.detect(stateWith(speedKmh = 0.5f)))
-    }
-
-    @Test
     fun `HR at threshold boundary does not trigger RUNNING`() {
-        // Exactly at threshold — speed is zero, HR is exactly the threshold (not above)
-        assertEquals(Scene.RESTING, detector.detect(stateWith(speedKmh = 0f, heartRate = SceneDetector.RUNNING_HR_THRESHOLD)))
+        assertEquals(Scene.FOCUS, detector.detect(stateWith(speedKmh = 0f, heartRate = SceneDetector.RUNNING_HR_THRESHOLD, hourOfDay = 10)))
+    }
+
+    // ── Cycling ────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `cycling speed with normal HR returns CYCLING`() {
+        assertEquals(Scene.CYCLING, detector.detect(stateWith(speedKmh = 4f, heartRate = 90)))
+        assertEquals(Scene.CYCLING, detector.detect(stateWith(speedKmh = 20f, heartRate = 100)))
+    }
+
+    // ── Walking ────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `walking speed returns WALKING`() {
+        assertEquals(Scene.WALKING, detector.detect(stateWith(speedKmh = 2f)))
+        assertEquals(Scene.WALKING, detector.detect(stateWith(speedKmh = 3f)))
+    }
+
+    // ── Workout ────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `stationary with elevated HR returns WORKOUT`() {
+        assertEquals(Scene.WORKOUT, detector.detect(stateWith(speedKmh = 0f, heartRate = 101)))
+        assertEquals(Scene.WORKOUT, detector.detect(stateWith(speedKmh = 0f, heartRate = 130)))
+    }
+
+    @Test
+    fun `HR at workout threshold boundary does not trigger WORKOUT`() {
+        // Exactly at threshold is not above it — should fall through to FOCUS or RESTING
+        assertEquals(Scene.FOCUS, detector.detect(stateWith(speedKmh = 0f, heartRate = SceneDetector.WORKOUT_HR_THRESHOLD, hourOfDay = 10)))
+    }
+
+    // ── Focus ──────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `stationary normal HR during daytime returns FOCUS`() {
+        assertEquals(Scene.FOCUS, detector.detect(stateWith(speedKmh = 0f, heartRate = 65, hourOfDay = 9)))
+        assertEquals(Scene.FOCUS, detector.detect(stateWith(speedKmh = 0f, heartRate = 65, hourOfDay = 14)))
+        assertEquals(Scene.FOCUS, detector.detect(stateWith(speedKmh = 0f, heartRate = 65, hourOfDay = 18)))
+    }
+
+    // ── Resting ────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `stationary normal HR outside focus hours returns RESTING`() {
+        assertEquals(Scene.RESTING, detector.detect(stateWith(speedKmh = 0f, heartRate = 60, hourOfDay = 22)))
+        assertEquals(Scene.RESTING, detector.detect(stateWith(speedKmh = 0f, heartRate = 60, hourOfDay = 3)))
+        assertEquals(Scene.RESTING, detector.detect(stateWith(speedKmh = 0f, heartRate = 60, hourOfDay = 19)))
     }
 }

@@ -17,12 +17,14 @@ class PromptBuilder @Inject constructor() {
 
     fun buildMetricsContext(state: SensorState, scene: Scene?): String {
         val activityLabel = when (scene) {
-            Scene.RUNNING -> "Running"
-            Scene.WALKING -> "Walking"
-            Scene.COMMUTING -> "Driving/Commuting"
-            Scene.STUCK_IN_TRAFFIC -> "Driving in Traffic"
-            Scene.RESTING -> "Resting"
-            null -> "Stationary"
+            Scene.RUNNING   -> "Running"
+            Scene.CYCLING   -> "Cycling"
+            Scene.WALKING   -> "Walking"
+            Scene.COMMUTING -> "Travelling"
+            Scene.WORKOUT   -> "Working Out"
+            Scene.FOCUS     -> "Focus/Study"
+            Scene.RESTING   -> "Resting"
+            null            -> "Stationary"
         }
 
         val sleepLabel = when {
@@ -87,6 +89,7 @@ class PromptBuilder @Inject constructor() {
                 state.hourOfDay >= 21 || state.hourOfDay < 5 -> 1   // Night → Low
                 state.hourOfDay in 18..20 -> 2                       // Evening → Medium cap
                 scene == Scene.RESTING || scene == null -> 2         // Resting → Medium cap
+                scene == Scene.FOCUS -> 2                            // Focus → Medium cap (calm, non-distracting)
                 else -> 4
             }
             val effectiveTier = if (readinessTier > 0) minOf(readinessTier, contextCap) else contextCap

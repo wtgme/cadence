@@ -9,28 +9,34 @@ import javax.inject.Singleton
 class SceneDetector @Inject constructor() {
 
     fun detect(state: SensorState): Scene = when {
-        // Driving: High speed
-        state.speedKmh >= DRIVING_SPEED_THRESHOLD -> Scene.COMMUTING
+        // Commuting: vehicle speed
+        state.speedKmh >= COMMUTING_SPEED_THRESHOLD -> Scene.COMMUTING
 
-        // Running: Mid-high speed or very high HR
+        // Running: high speed or very high HR (gym sprint, treadmill)
         state.speedKmh >= RUNNING_SPEED_THRESHOLD || state.heartRate > RUNNING_HR_THRESHOLD -> Scene.RUNNING
 
-        // Walking: Human walking speed
+        // Cycling: moderate speed but HR not in running zone
+        state.speedKmh >= CYCLING_SPEED_THRESHOLD -> Scene.CYCLING
+
+        // Walking: human pace
         state.speedKmh >= WALKING_SPEED_THRESHOLD -> Scene.WALKING
 
-        // Traffic: Moving slow in a vehicle context (between walking and running speed but usually on roads)
-        // Or just very slow movement that isn't resting
-        state.speedKmh > RESTING_SPEED_THRESHOLD && state.speedKmh < RUNNING_SPEED_THRESHOLD -> Scene.STUCK_IN_TRAFFIC
+        // Stationary — distinguish by HR and time of day
+        state.heartRate > WORKOUT_HR_THRESHOLD -> Scene.WORKOUT
 
-        // Default: stationary
+        state.hourOfDay in FOCUS_HOUR_START..FOCUS_HOUR_END -> Scene.FOCUS
+
         else -> Scene.RESTING
     }
 
     companion object {
-        const val DRIVING_SPEED_THRESHOLD = 25f    // km/h
-        const val RUNNING_SPEED_THRESHOLD = 8f     // km/h
-        const val WALKING_SPEED_THRESHOLD = 3f     // km/h
-        const val RUNNING_HR_THRESHOLD = 135       // bpm
-        const val RESTING_SPEED_THRESHOLD = 1f     // km/h
+        const val COMMUTING_SPEED_THRESHOLD = 25f   // km/h
+        const val RUNNING_SPEED_THRESHOLD   = 8f    // km/h
+        const val CYCLING_SPEED_THRESHOLD   = 4f    // km/h  (above brisk walk)
+        const val WALKING_SPEED_THRESHOLD   = 2f    // km/h
+        const val RUNNING_HR_THRESHOLD      = 135   // bpm
+        const val WORKOUT_HR_THRESHOLD      = 100   // bpm  (stationary elevated HR → gym)
+        const val FOCUS_HOUR_START          = 6     // 06:00 inclusive
+        const val FOCUS_HOUR_END            = 18    // 18:00 inclusive
     }
 }

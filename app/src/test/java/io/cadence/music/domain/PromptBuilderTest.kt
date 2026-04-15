@@ -43,9 +43,11 @@ class PromptBuilderTest {
     @Test
     fun `scene labels are correct`() {
         assertTrue(build(Scene.RUNNING).contains("Running"))
+        assertTrue(build(Scene.CYCLING).contains("Cycling"))
         assertTrue(build(Scene.WALKING).contains("Walking"))
         assertTrue(build(Scene.COMMUTING).contains("Commuting"))
-        assertTrue(build(Scene.STUCK_IN_TRAFFIC).contains("Traffic"))
+        assertTrue(build(Scene.WORKOUT).contains("Working Out"))
+        assertTrue(build(Scene.FOCUS).contains("Focus"))
         assertTrue(build(Scene.RESTING).contains("Resting"))
         assertTrue(build(null).contains("Stationary"))
     }

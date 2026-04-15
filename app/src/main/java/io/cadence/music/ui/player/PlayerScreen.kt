@@ -132,17 +132,21 @@ import io.cadence.music.ui.theme.FeedbackDislike
 import io.cadence.music.ui.theme.FeedbackLike
 import io.cadence.music.ui.theme.FeedbackNeutral
 import io.cadence.music.ui.theme.GlowCommuting
+import io.cadence.music.ui.theme.GlowCycling
 import io.cadence.music.ui.theme.GlowDefault
+import io.cadence.music.ui.theme.GlowFocus
 import io.cadence.music.ui.theme.GlowResting
 import io.cadence.music.ui.theme.GlowRunning
-import io.cadence.music.ui.theme.GlowTraffic
 import io.cadence.music.ui.theme.GlowWalking
+import io.cadence.music.ui.theme.GlowWorkout
 import io.cadence.music.ui.theme.SceneCommuting
+import io.cadence.music.ui.theme.SceneCycling
 import io.cadence.music.ui.theme.SceneDefault
+import io.cadence.music.ui.theme.SceneFocus
 import io.cadence.music.ui.theme.SceneResting
 import io.cadence.music.ui.theme.SceneRunning
-import io.cadence.music.ui.theme.SceneTraffic
 import io.cadence.music.ui.theme.SceneWalking
+import io.cadence.music.ui.theme.SceneWorkout
 import io.cadence.music.ui.theme.Surface0
 import io.cadence.music.ui.theme.Surface1
 import io.cadence.music.ui.theme.Surface2
@@ -157,21 +161,25 @@ import kotlinx.coroutines.launch
 // ── Scene helpers ──────────────────────────────────────────────────────────
 
 private fun Scene?.glowColor() = when (this) {
-    Scene.RUNNING          -> GlowRunning
-    Scene.WALKING          -> GlowWalking
-    Scene.COMMUTING        -> GlowCommuting
-    Scene.STUCK_IN_TRAFFIC -> GlowTraffic
-    Scene.RESTING          -> GlowResting
-    null                   -> GlowDefault
+    Scene.RUNNING   -> GlowRunning
+    Scene.CYCLING   -> GlowCycling
+    Scene.WALKING   -> GlowWalking
+    Scene.COMMUTING -> GlowCommuting
+    Scene.WORKOUT   -> GlowWorkout
+    Scene.FOCUS     -> GlowFocus
+    Scene.RESTING   -> GlowResting
+    null            -> GlowDefault
 }
 
 private fun Scene?.tintColor() = when (this) {
-    Scene.RUNNING          -> SceneRunning
-    Scene.WALKING          -> SceneWalking
-    Scene.COMMUTING        -> SceneCommuting
-    Scene.STUCK_IN_TRAFFIC -> SceneTraffic
-    Scene.RESTING          -> SceneResting
-    null                   -> SceneDefault
+    Scene.RUNNING   -> SceneRunning
+    Scene.CYCLING   -> SceneCycling
+    Scene.WALKING   -> SceneWalking
+    Scene.COMMUTING -> SceneCommuting
+    Scene.WORKOUT   -> SceneWorkout
+    Scene.FOCUS     -> SceneFocus
+    Scene.RESTING   -> SceneResting
+    null            -> SceneDefault
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1656,7 +1664,7 @@ fun MentalStateRow(ms: MentalState) {
                 label    = "STRESS",
                 value    = ms.stress,
                 max      = 10,
-                color    = GlowTraffic,
+                color    = FeedbackDislike,
                 modifier = Modifier.weight(1f),
             )
         }

@@ -1,17 +1,21 @@
 package io.cadence.music.data.model
 
 enum class Scene {
-    STUCK_IN_TRAFFIC,
-    COMMUTING,
     RUNNING,
+    CYCLING,
     WALKING,
+    COMMUTING,
+    WORKOUT,
+    FOCUS,
     RESTING;
 
     fun displayName(): String = when (this) {
-        STUCK_IN_TRAFFIC -> "Stuck in Traffic"
-        COMMUTING -> "Driving"
-        RUNNING -> "Running"
-        WALKING -> "Walking"
-        RESTING -> "Resting"
+        RUNNING    -> "Running"
+        CYCLING    -> "Cycling"
+        WALKING    -> "Walking"
+        COMMUTING  -> "Commuting"
+        WORKOUT    -> "Working Out"
+        FOCUS      -> "Focus"
+        RESTING    -> "Resting"
     }
 }
