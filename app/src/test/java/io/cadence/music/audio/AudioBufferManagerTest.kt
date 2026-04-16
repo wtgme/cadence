@@ -50,7 +50,7 @@ class AudioBufferManagerTest {
             override val translatedSongParams = MutableStateFlow<SongParams?>(null)
             override val translatedMentalState = MutableStateFlow<MentalState?>(null)
             override suspend fun translateMetrics(ctx: String) = fakeSongParams
-            override suspend fun translateMentalState(mentalState: MentalState) = fakeSongParams
+            override suspend fun translateMentalState(mentalState: MentalState, previousParams: SongParams?) = fakeSongParams
             override fun generateAudioStream(params: SongParams): Flow<StreamingChunk> =
                 streamBlock(++callCount)
         }

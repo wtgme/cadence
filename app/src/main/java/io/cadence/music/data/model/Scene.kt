@@ -7,6 +7,7 @@ enum class Scene {
     COMMUTING,
     WORKOUT,
     FOCUS,
+    PARTY,
     RESTING;
 
     fun displayName(): String = when (this) {
@@ -16,6 +17,7 @@ enum class Scene {
         COMMUTING  -> "Commuting"
         WORKOUT    -> "Working Out"
         FOCUS      -> "Focus"
+        PARTY      -> "Party"
         RESTING    -> "Resting"
     }
 }

@@ -136,6 +136,7 @@ import io.cadence.music.ui.theme.GlowCommuting
 import io.cadence.music.ui.theme.GlowCycling
 import io.cadence.music.ui.theme.GlowDefault
 import io.cadence.music.ui.theme.GlowFocus
+import io.cadence.music.ui.theme.GlowParty
 import io.cadence.music.ui.theme.GlowResting
 import io.cadence.music.ui.theme.GlowRunning
 import io.cadence.music.ui.theme.GlowWalking
@@ -144,6 +145,7 @@ import io.cadence.music.ui.theme.SceneCommuting
 import io.cadence.music.ui.theme.SceneCycling
 import io.cadence.music.ui.theme.SceneDefault
 import io.cadence.music.ui.theme.SceneFocus
+import io.cadence.music.ui.theme.SceneParty
 import io.cadence.music.ui.theme.SceneResting
 import io.cadence.music.ui.theme.SceneRunning
 import io.cadence.music.ui.theme.SceneWalking
@@ -168,6 +170,7 @@ private fun Scene?.glowColor() = when (this) {
     Scene.COMMUTING -> GlowCommuting
     Scene.WORKOUT   -> GlowWorkout
     Scene.FOCUS     -> GlowFocus
+    Scene.PARTY     -> GlowParty
     Scene.RESTING   -> GlowResting
     null            -> GlowDefault
 }
@@ -179,6 +182,7 @@ private fun Scene?.tintColor() = when (this) {
     Scene.COMMUTING -> SceneCommuting
     Scene.WORKOUT   -> SceneWorkout
     Scene.FOCUS     -> SceneFocus
+    Scene.PARTY     -> SceneParty
     Scene.RESTING   -> SceneResting
     null            -> SceneDefault
 }
@@ -354,18 +358,33 @@ fun PlayerScreen(viewModel: PlayerViewModel = hiltViewModel()) {
                         modifier  = if (isActive) Modifier.clickable { showReasoningModal = true } else Modifier,
                     )
                     if (isActive) {
-                        IconButton(
-                            onClick  = { showSceneOverride = true },
-                            modifier = Modifier
-                                .align(Alignment.CenterEnd)
-                                .size(40.dp),
-                        ) {
-                            Icon(
-                                imageVector        = Icons.Default.Tune,
-                                contentDescription = "Override scene",
-                                tint               = targetGlow.copy(alpha = 0.5f),
-                                modifier           = Modifier.size(18.dp),
-                            )
+                        Box(modifier = Modifier.align(Alignment.CenterEnd)) {
+                            IconButton(
+                                onClick  = { showSceneOverride = true },
+                                modifier = Modifier.size(40.dp),
+                            ) {
+                                Icon(
+                                    imageVector        = Icons.Default.Tune,
+                                    contentDescription = "Override scene",
+                                    tint               = targetGlow.copy(alpha = 0.5f),
+                                    modifier           = Modifier.size(18.dp),
+                                )
+                            }
+                            DropdownMenu(
+                                expanded         = showSceneOverride,
+                                onDismissRequest = { showSceneOverride = false },
+                                modifier         = Modifier.background(Surface2),
+                            ) {
+                                Scene.entries.forEach { s ->
+                                    DropdownMenuItem(
+                                        text    = { Text(s.displayName(), color = TextPrimary) },
+                                        onClick = {
+                                            viewModel.overrideScene(s)
+                                            showSceneOverride = false
+                                        },
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -695,22 +714,6 @@ fun PlayerScreen(viewModel: PlayerViewModel = hiltViewModel()) {
                 }
             }
 
-            // Scene override menu
-            DropdownMenu(
-                expanded         = showSceneOverride,
-                onDismissRequest = { showSceneOverride = false },
-                modifier         = Modifier.background(Surface2),
-            ) {
-                Scene.entries.forEach { s ->
-                    DropdownMenuItem(
-                        text    = { Text(s.displayName(), color = TextPrimary) },
-                        onClick = {
-                            viewModel.overrideScene(s)
-                            showSceneOverride = false
-                        },
-                    )
-                }
-            }
         }
     }
 

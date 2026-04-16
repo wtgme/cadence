@@ -45,9 +45,10 @@ class PromptBuilderTest {
         assertTrue(build(Scene.RUNNING).contains("Running"))
         assertTrue(build(Scene.CYCLING).contains("Cycling"))
         assertTrue(build(Scene.WALKING).contains("Walking"))
-        assertTrue(build(Scene.COMMUTING).contains("Commuting"))
+        assertTrue(build(Scene.COMMUTING).contains("Travelling"))
         assertTrue(build(Scene.WORKOUT).contains("Working Out"))
         assertTrue(build(Scene.FOCUS).contains("Focus"))
+        assertTrue(build(Scene.PARTY).contains("Party"))
         assertTrue(build(Scene.RESTING).contains("Resting"))
         assertTrue(build(null).contains("Stationary"))
     }

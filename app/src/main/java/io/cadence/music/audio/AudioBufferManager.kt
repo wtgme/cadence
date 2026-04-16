@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -79,8 +80,9 @@ class AudioBufferManager @Inject constructor(
      */
     @Volatile private var previousSongParams: SongParams? = null
 
-    /** Job for the currently active streaming request — cancelled by [drainAndReprime]. */
-    @Volatile private var activeStreamingJob: Job? = null
+    /** Active generation jobs — cancelled by [drainAndReprime]. Up to 2 concurrent. */
+    private val activeJobs = mutableListOf<Job>()
+    private val generationSemaphore = Semaphore(MAX_CONCURRENT_GENERATIONS)
 
     private val _chunksReady = MutableStateFlow(0)
     val chunksReady: StateFlow<Int> = _chunksReady
@@ -115,6 +117,7 @@ class AudioBufferManager @Inject constructor(
         scope.launch {
             Log.d(TAG, "Worker: started, waiting for requests")
             for (request in requestChannel) {
+                generationSemaphore.acquire()
                 Log.d(TAG, "Worker: request picked up, epoch=$generationEpoch")
                 val job = launch {
                     try {
@@ -125,11 +128,14 @@ class AudioBufferManager @Inject constructor(
                     } catch (e: Throwable) {
                         Log.e(TAG, "Worker: unexpected exception — keeping loop alive", e)
                         _lastError.value = e.message ?: "generation error"
+                    } finally {
+                        generationSemaphore.release()
                     }
                 }
-                activeStreamingJob = job
-                job.join()
-                Log.d(TAG, "Worker: job done, back to idle")
+                synchronized(activeJobs) {
+                    activeJobs.removeAll { !it.isActive }
+                    activeJobs.add(job)
+                }
             }
             Log.w(TAG, "Worker loop exited — requestChannel closed")
         }
@@ -197,6 +203,13 @@ class AudioBufferManager @Inject constructor(
                     if (firstChunk) {
                         firstChunk = false
                         recordSong(params)
+                        // Pre-trigger next song generation while this one is still streaming.
+                        // Save params for Step 1b variety and clear sessionParams so the next
+                        // song re-runs Step 1b. sessionMentalState is kept.
+                        previousSongParams = params
+                        sessionParams = null
+                        Log.d(TAG, "Worker: first chunk received — pre-triggering next song")
+                        requestChannel.trySend(Unit)
                     }
                     Log.d(TAG, "Worker: queuing chunk ${chunk.index} (${chunk.file.name})")
                     queue.send(chunk.file)
@@ -207,15 +220,7 @@ class AudioBufferManager @Inject constructor(
                     if (myEpoch == generationEpoch) _lastError.value = chunk.message
                 }
                 StreamingChunk.Complete -> {
-                    Log.d(TAG, "Worker: stream complete — auto-triggering next song")
-                    // Save the just-finished params for Step 1b variety, then clear
-                    // sessionParams so the next song re-runs Step 1b with the latest
-                    // taste memory. sessionMentalState is kept — Step 1a is not repeated.
-                    if (myEpoch == generationEpoch) {
-                        previousSongParams = params
-                        sessionParams = null
-                        requestChannel.trySend(Unit)
-                    }
+                    Log.d(TAG, "Worker: stream complete")
                 }
             }
         }
@@ -266,7 +271,7 @@ class AudioBufferManager @Inject constructor(
      * reuse the style established at session start rather than burning another OpenRouter call.
      */
     fun drainAndReprime(sensorState: SensorState, scene: Scene?) {
-        activeStreamingJob?.cancel()
+        cancelActiveJobs()
         generationEpoch++
         while (true) {
             val polled = queue.tryReceive()
@@ -313,7 +318,7 @@ class AudioBufferManager @Inject constructor(
      * rather than running to completion in the background.
      */
     fun cancelGeneration() {
-        activeStreamingJob?.cancel()
+        cancelActiveJobs()
         generationEpoch++
         while (true) {
             val polled = queue.tryReceive()
@@ -336,8 +341,16 @@ class AudioBufferManager @Inject constructor(
         currentScene = scene
     }
 
+    private fun cancelActiveJobs() {
+        synchronized(activeJobs) {
+            activeJobs.forEach { it.cancel() }
+            activeJobs.clear()
+        }
+    }
+
     companion object {
         private const val TAG = "AudioBufferManager"
         private const val MAX_HISTORY = 50
+        private const val MAX_CONCURRENT_GENERATIONS = 2
     }
 }

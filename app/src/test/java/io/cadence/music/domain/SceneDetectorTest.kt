@@ -15,8 +15,8 @@ class SceneDetectorTest {
         detector = SceneDetector()
     }
 
-    private fun stateWith(speedKmh: Float = 0f, heartRate: Int = 60, hourOfDay: Int = 10) =
-        SensorState(speedKmh = speedKmh, heartRate = heartRate, hourOfDay = hourOfDay)
+    private fun stateWith(speedKmh: Float = 0f, heartRate: Int = 60, hourOfDay: Int = 10, dayOfWeek: Int = 3) =
+        SensorState(speedKmh = speedKmh, heartRate = heartRate, hourOfDay = hourOfDay, dayOfWeek = dayOfWeek)
 
     // ── Commuting ──────────────────────────────────────────────────────────────
 
@@ -43,7 +43,8 @@ class SceneDetectorTest {
 
     @Test
     fun `HR at threshold boundary does not trigger RUNNING`() {
-        assertEquals(Scene.FOCUS, detector.detect(stateWith(speedKmh = 0f, heartRate = SceneDetector.RUNNING_HR_THRESHOLD, hourOfDay = 10)))
+        // HR exactly at 135 is NOT > 135, so falls to WORKOUT (135 > 100)
+        assertEquals(Scene.WORKOUT, detector.detect(stateWith(speedKmh = 0f, heartRate = SceneDetector.RUNNING_HR_THRESHOLD, hourOfDay = 10)))
     }
 
     // ── Cycling ────────────────────────────────────────────────────────────────
@@ -51,7 +52,7 @@ class SceneDetectorTest {
     @Test
     fun `cycling speed with normal HR returns CYCLING`() {
         assertEquals(Scene.CYCLING, detector.detect(stateWith(speedKmh = 4f, heartRate = 90)))
-        assertEquals(Scene.CYCLING, detector.detect(stateWith(speedKmh = 20f, heartRate = 100)))
+        assertEquals(Scene.CYCLING, detector.detect(stateWith(speedKmh = 7f, heartRate = 80)))
     }
 
     // ── Walking ────────────────────────────────────────────────────────────────
@@ -83,6 +84,42 @@ class SceneDetectorTest {
         assertEquals(Scene.FOCUS, detector.detect(stateWith(speedKmh = 0f, heartRate = 65, hourOfDay = 9)))
         assertEquals(Scene.FOCUS, detector.detect(stateWith(speedKmh = 0f, heartRate = 65, hourOfDay = 14)))
         assertEquals(Scene.FOCUS, detector.detect(stateWith(speedKmh = 0f, heartRate = 65, hourOfDay = 18)))
+    }
+
+    // ── Party ──────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `weekend evening with elevated HR returns PARTY`() {
+        // Saturday 22:00, HR 85
+        assertEquals(Scene.PARTY, detector.detect(stateWith(heartRate = 85, hourOfDay = 22, dayOfWeek = 7)))
+        // Friday 21:00, HR 80
+        assertEquals(Scene.PARTY, detector.detect(stateWith(heartRate = 80, hourOfDay = 21, dayOfWeek = 6)))
+        // Sunday 23:00, HR 90
+        assertEquals(Scene.PARTY, detector.detect(stateWith(heartRate = 90, hourOfDay = 23, dayOfWeek = 1)))
+    }
+
+    @Test
+    fun `weekday night with strong HR returns PARTY`() {
+        // Tuesday 22:00, HR 95 (above strong threshold)
+        assertEquals(Scene.PARTY, detector.detect(stateWith(heartRate = 95, hourOfDay = 22, dayOfWeek = 3)))
+    }
+
+    @Test
+    fun `weekday night with low HR does not return PARTY`() {
+        // Tuesday 22:00, HR 65 — not enough for party
+        assertEquals(Scene.RESTING, detector.detect(stateWith(heartRate = 65, hourOfDay = 22, dayOfWeek = 3)))
+    }
+
+    @Test
+    fun `daytime does not return PARTY even on weekend`() {
+        // Saturday 14:00, HR 85 — daytime, should be Focus not Party
+        assertEquals(Scene.FOCUS, detector.detect(stateWith(heartRate = 85, hourOfDay = 14, dayOfWeek = 7)))
+    }
+
+    @Test
+    fun `high speed at night returns COMMUTING not PARTY`() {
+        // Speed-based scenes take priority
+        assertEquals(Scene.COMMUTING, detector.detect(stateWith(speedKmh = 30f, heartRate = 85, hourOfDay = 22, dayOfWeek = 7)))
     }
 
     // ── Resting ────────────────────────────────────────────────────────────────

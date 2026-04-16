@@ -23,6 +23,7 @@ class PromptBuilder @Inject constructor() {
             Scene.COMMUTING -> "Travelling"
             Scene.WORKOUT   -> "Working Out"
             Scene.FOCUS     -> "Focus/Study"
+            Scene.PARTY     -> "Party/Social"
             Scene.RESTING   -> "Resting"
             null            -> "Stationary"
         }
@@ -88,6 +89,7 @@ class PromptBuilder @Inject constructor() {
             val contextCap = when {
                 state.hourOfDay >= 21 || state.hourOfDay < 5 -> 1   // Night → Low
                 state.hourOfDay in 18..20 -> 2                       // Evening → Medium cap
+                scene == Scene.PARTY -> 4                            // Party → uncapped (high energy)
                 scene == Scene.RESTING || scene == null -> 2         // Resting → Medium cap
                 scene == Scene.FOCUS -> 2                            // Focus → Medium cap (calm, non-distracting)
                 else -> 4
