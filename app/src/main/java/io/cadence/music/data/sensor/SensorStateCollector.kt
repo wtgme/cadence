@@ -7,8 +7,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 import java.util.Calendar
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -80,6 +82,18 @@ class SensorStateCollector @Inject constructor(
             readinessScore = readiness.score,
             readinessBreakdown = readiness.breakdown,
         )
+    }.distinctUntilChanged { old, new ->
+        // Suppress re-emission when only GPS noise changed — avoids redundant
+        // scene detection / HR drift checks on every location tick.
+        abs(old.speedKmh - new.speedKmh) < 1.0f &&
+            old.heartRate == new.heartRate &&
+            old.weather == new.weather &&
+            old.hourOfDay == new.hourOfDay &&
+            old.sleepScore == new.sleepScore &&
+            old.activityMinutesToday == new.activityMinutesToday &&
+            old.spo2 == new.spo2 &&
+            old.stepsToday == new.stepsToday &&
+            old.readinessScore == new.readinessScore
     }
 
     fun start() {

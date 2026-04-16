@@ -204,7 +204,7 @@ class HealthDataManager @Inject constructor(
 
     companion object {
         private const val TAG = "HealthDataManager"
-        private const val POLL_INTERVAL_MS = 60_000L
-        private const val SLOW_POLL_EVERY_N = 5 // sync exercise sessions every 5 min
+        private const val POLL_INTERVAL_MS = 180_000L // 3 min — watch HR syncs infrequently
+        private const val SLOW_POLL_EVERY_N = 2 // sync exercise sessions every ~6 min
     }
 }

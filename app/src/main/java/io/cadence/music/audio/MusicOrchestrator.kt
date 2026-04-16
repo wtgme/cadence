@@ -117,6 +117,11 @@ class MusicOrchestrator @Inject constructor(
                 val previous = _currentScene.value
                 _currentScene.value = scene
                 bufferManager.updateScene(scene)
+                // Adapt GPS accuracy to the current scene
+                context.startService(Intent(context, LocationService::class.java).apply {
+                    action = LocationService.ACTION_UPDATE_SCENE
+                    putExtra(LocationService.EXTRA_SCENE, scene.name)
+                })
                 // Context shift — regenerate buffer with new vibe
                 if (playbackStarted && previous != null && previous != scene) {
                     Log.d(TAG, "Context shift $previous → $scene — repriming buffer")

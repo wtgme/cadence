@@ -19,6 +19,7 @@ import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.Priority
 import dagger.hilt.android.AndroidEntryPoint
 import io.cadence.music.R
+import io.cadence.music.data.model.Scene
 import javax.inject.Inject
 
 data class LocationData(
@@ -34,6 +35,7 @@ class LocationService : Service() {
     @Inject lateinit var locationRepository: LocationRepository
 
     private var lastLocation: Location? = null
+    private var currentPriority: Int = Priority.PRIORITY_BALANCED_POWER_ACCURACY
 
     private val locationCallback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
@@ -96,7 +98,34 @@ class LocationService : Service() {
         super.onDestroy()
     }
 
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            ACTION_UPDATE_SCENE -> {
+                val sceneName = intent.getStringExtra(EXTRA_SCENE)
+                val scene = sceneName?.let { runCatching { Scene.valueOf(it) }.getOrNull() }
+                updateLocationPriority(scene)
+            }
+        }
+        return START_STICKY
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
+
+    /**
+     * Switch GPS accuracy based on detected scene. Active scenes (running, cycling,
+     * commuting) use high-accuracy at 5s intervals; sedentary scenes use balanced-power
+     * at 10s intervals — significantly reducing GPS radio usage and heat.
+     */
+    fun updateLocationPriority(scene: Scene?) {
+        val needsHighAccuracy = scene in HIGH_ACCURACY_SCENES
+        val targetPriority = if (needsHighAccuracy)
+            Priority.PRIORITY_HIGH_ACCURACY else Priority.PRIORITY_BALANCED_POWER_ACCURACY
+        if (targetPriority == currentPriority) return
+        currentPriority = targetPriority
+        Log.d(TAG, "Switching GPS priority: ${if (needsHighAccuracy) "HIGH_ACCURACY (5s)" else "BALANCED_POWER (10s)"} for scene=$scene")
+        fusedLocationClient.removeLocationUpdates(locationCallback)
+        requestLocationUpdates()
+    }
 
     private fun requestLocationUpdates() {
         val fineGranted = checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) ==
@@ -108,10 +137,13 @@ class LocationService : Service() {
             stopSelf()
             return
         }
-        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 2_000L)
-            .setMinUpdateIntervalMillis(1_000L)
+        val intervalMs = if (currentPriority == Priority.PRIORITY_HIGH_ACCURACY) 5_000L else 10_000L
+        val minIntervalMs = if (currentPriority == Priority.PRIORITY_HIGH_ACCURACY) 3_000L else 5_000L
+        val request = LocationRequest.Builder(currentPriority, intervalMs)
+            .setMinUpdateIntervalMillis(minIntervalMs)
             .build()
         fusedLocationClient.requestLocationUpdates(request, locationCallback, mainLooper)
+        Log.d(TAG, "Location updates requested: interval=${intervalMs}ms, priority=$currentPriority")
     }
 
     private fun buildNotification(): Notification {
@@ -133,6 +165,10 @@ class LocationService : Service() {
 
     companion object {
         const val NOTIFICATION_ID = 1001
+        const val ACTION_UPDATE_SCENE = "io.cadence.music.action.UPDATE_SCENE"
+        const val EXTRA_SCENE = "scene"
         private const val TAG = "LocationService"
+        /** Scenes that need fast, precise GPS for speed-based detection. */
+        private val HIGH_ACCURACY_SCENES = setOf(Scene.RUNNING, Scene.CYCLING, Scene.COMMUTING)
     }
 }
