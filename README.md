@@ -31,9 +31,9 @@
 
 ## Scientific Background
 
-Music is among the most effective strategies for everyday emotion regulation [(Peters et al., 2024)](https://doi.org/10.1177/03057356231212362). The **iso-principle** — matching music to a listener's psychophysiological state before shifting it toward a target — has controlled experimental support, producing significantly higher positive affect than passive listening [(Starcke & von Georgi, 2024)](https://doi.org/10.1177/10298649231175029). Neurobiologically, music modulates cortisol, autonomic arousal, and reward circuitry [(Koelsch, 2014)](https://doi.org/10.1038/nrn3666).
+Music is among the most effective strategies for everyday emotion regulation. The **iso-principle** — matching music to a listener's psychophysiological state before shifting it toward a target — has controlled experimental support, producing significantly higher positive affect than passive listening. Neurobiologically, music modulates cortisol, autonomic arousal, and reward circuitry.
 
-These effects depend critically on *fit* between musical properties and real-time listener state. No existing consumer system achieves this automatically [(Lu & Song, 2025)](https://doi.org/10.3389/fpsyg.2025.1565614). Cadence is a functional prototype addressing this gap.
+These effects depend critically on *fit* between musical properties and real-time listener state. No existing consumer system achieves this automatically. Cadence is a functional prototype addressing this gap.
 
 ---
 
