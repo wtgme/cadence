@@ -19,11 +19,11 @@
 
 <table>
   <tr>
-    <td align="center"><img src="screenshots/screen_player.png" width="160"/><br/><sub><b>Player</b><br/>Live scene & heart rate</sub></td>
-    <td align="center"><img src="screenshots/screen_reasoning.png" width="160"/><br/><sub><b>Synthesising</b><br/>Generation in progress</sub></td>
-    <td align="center"><img src="screenshots/screen_adjust.png" width="160"/><br/><sub><b>AI Reasoning Chain</b><br/>Biometric vitals & mental state</sub></td>
-    <td align="center"><img src="screenshots/screen_recommendation.png" width="160"/><br/><sub><b>Taste Profile</b><br/>Generated tracks & preferences</sub></td>
-    <td align="center"><img src="screenshots/scene_override_menu.png" width="160"/><br/><sub><b>Scene Override</b><br/>Manual context control</sub></td>
+    <td align="center"><img src="screenshots/screen_player.png" width="160" height="347"/><br/><sub><b>Player</b><br/>Live scene & heart rate</sub></td>
+    <td align="center"><img src="screenshots/screen_reasoning.png" width="160" height="347"/><br/><sub><b>Synthesising</b><br/>Generation in progress</sub></td>
+    <td align="center"><img src="screenshots/screen_adjust.png" width="160" height="347"/><br/><sub><b>AI Reasoning Chain</b><br/>Biometric vitals & mental state</sub></td>
+    <td align="center"><img src="screenshots/screen_recommendation.png" width="160" height="347"/><br/><sub><b>Taste Profile</b><br/>Generated tracks & preferences</sub></td>
+    <td align="center"><img src="screenshots/scene_override_menu.png" width="160" height="347"/><br/><sub><b>Scene Override</b><br/>Manual context control</sub></td>
   </tr>
 </table>
 
