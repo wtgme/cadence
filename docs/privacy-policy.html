@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy — Cadence AI Music</title>
+<style>
+  :root { --fg: #1a1a2e; --muted: #555; --accent: #3b0764; --bg: #fafafa; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         max-width: 780px; margin: 2.5rem auto; padding: 0 1.25rem; line-height: 1.6;
+         color: var(--fg); background: var(--bg); }
+  h1 { border-bottom: 3px solid var(--accent); padding-bottom: 0.5rem; margin-top: 0; }
+  h2 { margin-top: 2rem; color: var(--accent); }
+  h3 { margin-top: 1.25rem; color: var(--fg); font-size: 1.05rem; }
+  .meta { color: var(--muted); font-size: 0.9rem; margin-bottom: 2rem; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.95rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #ddd; vertical-align: top; }
+  th { background: #eee; }
+  a { color: var(--accent); }
+  code { background: #eee; padding: 0 4px; border-radius: 3px; font-size: 0.9em; }
+  footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #ddd;
+           color: var(--muted); font-size: 0.85rem; }
+</style>
+</head>
+<body>
+
+<h1>Privacy Policy — Cadence AI Music</h1>
+<p class="meta"><strong>Last updated:</strong> 20 April 2026</p>
+
+<p>This privacy policy describes how Cadence AI Music (&ldquo;the app&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;) handles information when you use it on your Android device.</p>
+
+<h2>1. Who we are</h2>
+<p>Cadence AI Music is developed by <strong>[YOUR FULL LEGAL NAME]</strong>, based in the United Kingdom.</p>
+<ul>
+  <li>Contact: <strong>[YOUR CONTACT EMAIL]</strong></li>
+  <li>Website: <a href="https://cadencemusics.uk">https://cadencemusics.uk</a></li>
+</ul>
+
+<h2>2. What data the app uses</h2>
+<p>Cadence AI Music personalises instrumental music to your current physiological state. To do that, it uses the following categories of data:</p>
+
+<h3>2.1 Health and fitness data (via Android Health Connect)</h3>
+<ul>
+  <li>Heart rate (including resting heart rate and heart-rate variability)</li>
+  <li>Sleep duration and stages (deep, REM)</li>
+  <li>SpO<sub>2</sub> (blood oxygen)</li>
+  <li>Step count, distance, and active calories</li>
+  <li>Body temperature (if available)</li>
+  <li>Blood pressure (if available)</li>
+</ul>
+<p>You grant access to each of these separately via the standard Android Health Connect permission prompt. You can revoke any permission at any time from <strong>Settings &rarr; Apps &rarr; Health Connect &rarr; App permissions</strong>.</p>
+
+<h3>2.2 Location data</h3>
+<p>Precise location (GPS coordinates and speed). Used to detect your activity context (walking, running, commuting) and to look up current local weather. Location is not stored on any server.</p>
+
+<h3>2.3 App preferences</h3>
+<ul>
+  <li>Your genre toggles, energy bias, and free-text adjustments</li>
+  <li>Anonymous song-rating feedback used to build an on-device taste profile</li>
+</ul>
+<p>These preferences live only on your device in Android&rsquo;s private app storage.</p>
+
+<h2>3. How your data is processed</h2>
+
+<h3>3.1 On-device processing</h3>
+<p>All raw sensor readings &mdash; heart rate, sleep, steps, GPS coordinates &mdash; are read and processed <strong>locally on your device</strong>. They are never uploaded in raw form.</p>
+
+<h3>3.2 Anonymous summaries sent off-device</h3>
+<p>To generate music matched to your state, the app sends a short <strong>anonymised biometric summary</strong> (e.g. &ldquo;heart rate 92, walking, 18:30, overcast&rdquo;) to the music-generation backend. This summary:</p>
+<ul>
+  <li>Contains no personal identifiers (no name, email, device ID, or account ID)</li>
+  <li>Is ephemeral &mdash; processed in memory to produce a music style, then discarded</li>
+  <li>Is transmitted over HTTPS (TLS 1.2+)</li>
+</ul>
+
+<h3>3.3 Third-party services the app contacts</h3>
+<table>
+  <thead><tr><th>Service</th><th>What it receives</th><th>Why</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Cadence inference backend (<code>chat.cadencemusics.uk</code>, <code>api.cadencemusics.uk</code>)</td>
+      <td>Anonymised biometric summary &rarr; song style parameters &rarr; audio</td>
+      <td>Music generation</td>
+    </tr>
+    <tr>
+      <td>Open-Meteo (<code>api.open-meteo.com</code>)</td>
+      <td>Approximate coordinates (rounded)</td>
+      <td>Current local weather</td>
+    </tr>
+    <tr>
+      <td>Google Play Services</td>
+      <td>Location fix request</td>
+      <td>Standard Android location API</td>
+    </tr>
+    <tr>
+      <td>Android Health Connect</td>
+      <td>Read requests for the health data types above</td>
+      <td>System health-data broker</td>
+    </tr>
+  </tbody>
+</table>
+<p>No analytics SDK, advertising SDK, or crash-reporting SDK is embedded in the app.</p>
+
+<h2>4. What we do <em>not</em> do</h2>
+<ul>
+  <li>We do not collect your name, email, phone number, or any account credential.</li>
+  <li>We do not sell, rent, or share your data with advertisers.</li>
+  <li>We do not build a profile that can be used to identify you.</li>
+  <li>We do not store your health data on our servers.</li>
+  <li>We do not track your location history.</li>
+</ul>
+
+<h2>5. Data retention</h2>
+<ul>
+  <li>Data sent to the inference backend is processed in memory and discarded at request end. Request logs retain only coarse statistics (timestamp, request ID, model version) for service reliability; these contain no biometric values.</li>
+  <li>On-device preferences (taste memory, user adjustments) remain on your device until you uninstall the app or clear its data.</li>
+</ul>
+
+<h2>6. Your rights under UK GDPR</h2>
+<p>If you are in the UK or the EU, you have the right to:</p>
+<ul>
+  <li>Ask what data we hold about you (answer: no personally identifiable data)</li>
+  <li>Request deletion of any stored preferences (uninstall the app, or clear app data)</li>
+  <li>Object to processing</li>
+  <li>Lodge a complaint with the UK Information Commissioner&rsquo;s Office (<a href="https://ico.org.uk">ico.org.uk</a>)</li>
+</ul>
+<p>Because the app does not associate data with an identity, there is typically no record to access or delete beyond what lives on your own device.</p>
+
+<h2>7. Children</h2>
+<p>Cadence AI Music is not directed at children under 13. Health Connect itself requires Android 14+ and a Google account; users must meet Google&rsquo;s minimum age requirements.</p>
+
+<h2>8. Security</h2>
+<ul>
+  <li>All network traffic uses TLS 1.2 or newer.</li>
+  <li>The inference backend is hosted on a private UK research network with restricted access.</li>
+  <li>No persistent storage of biometric data occurs off your device.</li>
+</ul>
+
+<h2>9. Changes to this policy</h2>
+<p>We will post material changes on this page and update the &ldquo;Last updated&rdquo; date. Continued use of the app after a change constitutes acceptance.</p>
+
+<h2>10. Contact</h2>
+<p>Questions or data-rights requests: <strong>[YOUR CONTACT EMAIL]</strong></p>
+
+<footer>
+  Cadence AI Music &mdash; <a href="https://github.com/wtgme/cadence">github.com/wtgme/cadence</a>
+</footer>
+
+</body>
+</html>
