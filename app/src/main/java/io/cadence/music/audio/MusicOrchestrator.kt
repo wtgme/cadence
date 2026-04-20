@@ -72,6 +72,7 @@ class MusicOrchestrator @Inject constructor(
     val lastError: StateFlow<String?> = bufferManager.lastError
     val songHistory = bufferManager.songHistory
     val playbackProgress = bufferManager.playbackProgress
+    val hasPrevious = bufferManager.hasPrevious
 
     private var detectionJob: Job? = null
     private var sceneJob: Job? = null

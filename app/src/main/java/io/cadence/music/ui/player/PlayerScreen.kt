@@ -48,6 +48,7 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.MonitorHeart
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -193,7 +194,10 @@ private fun Scene?.tintColor() = when (this) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PlayerScreen(viewModel: PlayerViewModel = hiltViewModel()) {
+fun PlayerScreen(
+    onNavigateToSettings: () -> Unit = {},
+    viewModel: PlayerViewModel = hiltViewModel(),
+) {
     val confirmedScene          by viewModel.currentScene.collectAsState()
     val candidateScene          by viewModel.candidateScene.collectAsState()
     val sensorState             by viewModel.sensorState.collectAsState()
@@ -212,6 +216,7 @@ fun PlayerScreen(viewModel: PlayerViewModel = hiltViewModel()) {
     val currentAdjustment       by viewModel.currentAdjustment.collectAsState()
     val generationStartMs       by viewModel.generationStartMs.collectAsState()
     val isAdaptingToHrDrift     by viewModel.isAdaptingToHrDrift.collectAsState()
+    val hasPrevious             by viewModel.hasPrevious.collectAsState()
 
     val healthPermissionLauncher = rememberLauncherForActivityResult(
         PermissionController.createRequestPermissionResultContract()
@@ -223,6 +228,7 @@ fun PlayerScreen(viewModel: PlayerViewModel = hiltViewModel()) {
     val isBuffering = playbackState == PlaybackState.BUFFERING
     val isPlaying   = playbackState == PlaybackState.PLAYING
     val isActive    = playbackState != PlaybackState.IDLE
+    val hasHistory  = songHistory.isNotEmpty()
 
     var showSceneOverride     by remember { mutableStateOf(false) }
     var showReasoningModal    by remember { mutableStateOf(false) }
@@ -235,7 +241,10 @@ fun PlayerScreen(viewModel: PlayerViewModel = hiltViewModel()) {
         targetValue = when {
             !isActive          -> 64.dp
             adjustmentExpanded -> 290.dp
-            else               -> 100.dp
+            else               -> {
+                val base = if (hasHistory) 148.dp else 100.dp
+                if (!currentAdjustment.isEmpty()) (base - 44.dp).coerceAtLeast(72.dp) else base
+            }
         },
         animationSpec = tween(durationMillis = 350),
         label         = "heroBottomPad",
@@ -337,11 +346,27 @@ fun PlayerScreen(viewModel: PlayerViewModel = hiltViewModel()) {
                 verticalArrangement = Arrangement.Center,
             ) {
                 // ── Header ────────────────────────────────────────────────
-                Text(
-                    text  = "CADENCE",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = targetGlow,
-                )
+                Box(
+                    modifier         = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text  = "CADENCE",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = targetGlow,
+                    )
+                    IconButton(
+                        onClick  = onNavigateToSettings,
+                        modifier = Modifier.align(Alignment.CenterEnd).size(36.dp),
+                    ) {
+                        Icon(
+                            imageVector        = Icons.Default.Settings,
+                            contentDescription = "API settings",
+                            tint               = targetGlow.copy(alpha = 0.5f),
+                            modifier           = Modifier.size(18.dp),
+                        )
+                    }
+                }
 
                 Spacer(Modifier.height(12.dp))
 
@@ -464,12 +489,26 @@ fun PlayerScreen(viewModel: PlayerViewModel = hiltViewModel()) {
 
                 Spacer(Modifier.height(12.dp))
 
-                // ── Style tags ────────────────────────────────────────────
-                songParams?.descriptions?.let { desc ->
-                    if (desc.isNotBlank()) {
-                        StyleTagRow(descriptions = desc, glowColor = targetGlow)
-                        Spacer(Modifier.height(12.dp))
+                // ── Style tags + lyric preview ───────────────────────────
+                songParams?.let { params ->
+                    if (!params.descriptions.isNullOrBlank()) {
+                        StyleTagRow(descriptions = params.descriptions, glowColor = targetGlow)
+                        Spacer(Modifier.height(6.dp))
                     }
+                    val lyricPreview = params.lyric.lines().firstOrNull { it.isNotBlank() }?.trim()
+                    if (!lyricPreview.isNullOrBlank()) {
+                        Text(
+                            text      = lyricPreview,
+                            style     = MaterialTheme.typography.labelSmall,
+                            color     = TextTertiary,
+                            fontStyle = FontStyle.Italic,
+                            maxLines  = 1,
+                            overflow  = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center,
+                            modifier  = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    Spacer(Modifier.height(12.dp))
                 }
 
                 // ── Timeline ──────────────────────────────────────────────
@@ -516,13 +555,13 @@ fun PlayerScreen(viewModel: PlayerViewModel = hiltViewModel()) {
                 ) {
                     IconButton(
                         onClick  = { viewModel.skipToPrevious() },
-                        enabled  = isPlaying,
+                        enabled  = isPlaying && hasPrevious,
                         modifier = Modifier.size(48.dp),
                     ) {
                         Icon(
                             imageVector        = Icons.Default.SkipPrevious,
                             contentDescription = "Previous",
-                            tint               = if (isPlaying) TextPrimary else TextTertiary,
+                            tint               = if (isPlaying && hasPrevious) TextPrimary else TextTertiary,
                             modifier           = Modifier.size(30.dp),
                         )
                     }
@@ -576,18 +615,28 @@ fun PlayerScreen(viewModel: PlayerViewModel = hiltViewModel()) {
                         glowColor     = targetGlow,
                     )
                 }
+
+                // ── Recent tracks strip ───────────────────────────────────
+                AnimatedVisibility(
+                    visible = isActive && hasHistory,
+                    enter   = fadeIn() + slideInVertically { 20 },
+                    exit    = fadeOut() + slideOutVertically { 20 },
+                ) {
+                    RecentTracksStrip(
+                        songHistory = songHistory,
+                        onViewAll   = { coroutineScope.launch { scaffoldState.bottomSheetState.expand() } },
+                        modifier    = Modifier.padding(top = 12.dp),
+                    )
+                }
             }
 
             // ── Error banner — full-bleed amber at top ────────────────────
             if (lastError != null && isActive) {
                 ErrorBanner(
+                    message  = lastError ?: "Generation failed",
                     modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(
-                            top   = innerPadding.calculateTopPadding() + 8.dp,
-                            start = 16.dp,
-                            end   = 16.dp,
-                        ),
+                        .align(Alignment.Center)
+                        .padding(horizontal = 16.dp),
                     onRetry = { viewModel.retryGeneration() },
                 )
             }
@@ -1009,7 +1058,7 @@ private fun BottomSheetContent(
                 modifier = Modifier.padding(vertical = 4.dp),
             )
             var tracksExpanded by remember { mutableStateOf(false) }
-            val visibleTracks  = if (tracksExpanded) songHistory else songHistory.take(3)
+            val visibleTracks  = if (tracksExpanded) songHistory else songHistory.take(5)
 
             Row(
                 modifier              = Modifier.fillMaxWidth(),
@@ -1021,9 +1070,9 @@ private fun BottomSheetContent(
                     style = MaterialTheme.typography.labelSmall,
                     color = TextTertiary,
                 )
-                if (songHistory.size > 3) {
+                if (songHistory.size > 5) {
                     Text(
-                        text     = if (tracksExpanded) "show less" else "+${songHistory.size - 3} more",
+                        text     = if (tracksExpanded) "show less" else "+${songHistory.size - 5} more",
                         style    = MaterialTheme.typography.labelSmall,
                         color    = GlowDefault.copy(alpha = 0.6f),
                         modifier = Modifier.clickable { tracksExpanded = !tracksExpanded },
@@ -1330,7 +1379,7 @@ fun TrackFeedbackRow(
 }
 
 @Composable
-private fun ErrorBanner(modifier: Modifier = Modifier, onRetry: () -> Unit) {
+private fun ErrorBanner(message: String, modifier: Modifier = Modifier, onRetry: () -> Unit) {
     val alpha by rememberInfiniteTransition(label = "errorPulse").animateFloat(
         initialValue  = 0.88f,
         targetValue   = 1f,
@@ -1358,7 +1407,7 @@ private fun ErrorBanner(modifier: Modifier = Modifier, onRetry: () -> Unit) {
                 modifier           = Modifier.size(18.dp),
             )
             Text(
-                text     = "Generation failed — tap retry",
+                text     = message,
                 style    = MaterialTheme.typography.bodySmall,
                 color    = Color.Black,
                 modifier = Modifier.weight(1f),
@@ -1621,6 +1670,51 @@ fun GeneratedTrackCard(song: GeneratedSong, modifier: Modifier = Modifier) {
                         fontStyle = FontStyle.Italic,
                         modifier  = Modifier.padding(start = 82.dp),
                     )
+                }
+                song.mentalState?.let { ms ->
+                    Spacer(Modifier.height(5.dp))
+                    Row(
+                        modifier          = Modifier.padding(start = 82.dp).fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    ) {
+                        Text(
+                            text  = "energy",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextTertiary,
+                            fontSize = 8.sp,
+                        )
+                        val energyFraction = ((ms.energy ?: 0) / 10f).coerceIn(0f, 1f)
+                        val energyColor = when {
+                            (ms.energy ?: 0) >= 7 -> GlowRunning
+                            (ms.energy ?: 0) >= 4 -> GlowWalking
+                            else                  -> GlowResting
+                        }
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(3.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(Color.White.copy(alpha = 0.08f)),
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .fillMaxWidth(energyFraction)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(energyColor.copy(alpha = 0.6f)),
+                            )
+                        }
+                        ms.mood?.let { mood ->
+                            Text(
+                                text      = mood,
+                                style     = MaterialTheme.typography.labelSmall,
+                                color     = TextTertiary,
+                                fontSize  = 8.sp,
+                                fontStyle = FontStyle.Italic,
+                            )
+                        }
+                    }
                 }
             }
 
@@ -1950,6 +2044,83 @@ private fun TasteProfileSection(
                         modifier  = Modifier.width(36.dp),
                         textAlign = TextAlign.End,
                     )
+                }
+            }
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Recent Tracks Strip
+// ═══════════════════════════════════════════════════════════════════════════
+
+@Composable
+private fun RecentTracksStrip(
+    songHistory: List<GeneratedSong>,
+    onViewAll: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier              = Modifier.fillMaxWidth(),
+            verticalAlignment     = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text  = "RECENT TRACKS",
+                style = MaterialTheme.typography.labelSmall,
+                color = TextTertiary,
+            )
+            Text(
+                text     = "View all ${songHistory.size} ↑",
+                style    = MaterialTheme.typography.labelSmall,
+                color    = GlowDefault.copy(alpha = 0.6f),
+                modifier = Modifier.clickable(onClick = onViewAll),
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier              = Modifier.fillMaxWidth(),
+        ) {
+            items(songHistory.take(8)) { song ->
+                val chipGlow = song.scene.glowColor()
+                val topTag   = song.params.descriptions
+                    ?.split(",", ";")
+                    ?.firstOrNull { it.isNotBlank() }
+                    ?.trim() ?: ""
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(chipGlow.copy(alpha = 0.10f))
+                        .border(1.dp, chipGlow.copy(alpha = 0.25f), RoundedCornerShape(12.dp))
+                        .clickable(onClick = onViewAll)
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text       = song.scene?.displayName() ?: "—",
+                            style      = MaterialTheme.typography.labelSmall,
+                            color      = chipGlow,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize   = 10.sp,
+                        )
+                        if (topTag.isNotBlank()) {
+                            Text(
+                                text     = topTag,
+                                style    = MaterialTheme.typography.labelSmall,
+                                color    = TextSecondary,
+                                fontSize = 8.sp,
+                                maxLines = 1,
+                            )
+                        }
+                        Text(
+                            text     = timeAgo(song.generatedAt),
+                            style    = MaterialTheme.typography.labelSmall,
+                            color    = TextTertiary,
+                            fontSize = 8.sp,
+                        )
+                    }
                 }
             }
         }

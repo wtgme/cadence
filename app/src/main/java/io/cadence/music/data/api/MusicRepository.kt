@@ -2,7 +2,6 @@ package io.cadence.music.data.api
 
 import android.util.Log
 import com.squareup.moshi.Moshi
-import io.cadence.music.BuildConfig
 import io.cadence.music.data.adjustment.UserAdjustmentRepository
 import io.cadence.music.data.model.MentalState
 import io.cadence.music.data.taste.TasteMemoryRepository
@@ -16,20 +15,21 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
  * Three-step music generation pipeline:
- *   Step 1a — OpenRouter (nemotron): biometric context → [MentalState]
- *   Step 1b — OpenRouter (nemotron): [MentalState] → [SongParams]
- *   Step 2  — [GenerationBackend] (SongGeneration): [SongParams] → audio file
+ *   Step 1a — Signal2Style LLM: biometric context → [MentalState]
+ *   Step 1b — Signal2Style LLM: [MentalState] → [SongParams]
+ *   Step 2  — [GenerationBackend]: [SongParams] → audio file
  *
  * Fallback chain if the two-query path fails:
  *   1. Two-query (1a → 1b)         ← preferred
  *   2. Single-query (original prompt) ← if either step fails
- *   3. Hardcoded [fallbackParams]   ← if OpenRouter is unreachable
+ *   3. Hardcoded [fallbackParams]   ← if Signal2Style endpoint is unreachable
  */
 @Singleton
 class MusicRepository @Inject constructor(
@@ -38,6 +38,7 @@ class MusicRepository @Inject constructor(
     private val backend: GenerationBackend,
     private val tasteMemory: TasteMemoryRepository,
     private val userAdjustmentRepository: UserAdjustmentRepository,
+    private val apiSettings: io.cadence.music.data.settings.ApiSettingsRepository,
 ) : GenerationRepository {
 
     private val openRouterClient = okHttpClient.newBuilder()
@@ -60,9 +61,9 @@ class MusicRepository @Inject constructor(
 
     override suspend fun translateMetrics(metricsContext: String): SongParams =
         withContext(Dispatchers.IO) {
-            val apiKey = BuildConfig.OPENROUTER_API_KEY
+            val apiKey = apiSettings.current.signal2StyleApiKey
             if (apiKey.isBlank()) {
-                Log.w(TAG, "OPENROUTER_API_KEY missing — using fallback params")
+                Log.w(TAG, "SIGNAL2STYLE_API_KEY missing — using fallback params")
                 return@withContext fallbackParams(metricsContext).also { publishTranslatedParams(it) }
             }
             try {
@@ -90,10 +91,12 @@ class MusicRepository @Inject constructor(
                     return@withContext singleResult
                 }
 
-                fallbackParams(metricsContext).also { publishTranslatedParams(it) }
+                throw IOException("AI style service unavailable — check your API key or try again later")
+            } catch (e: IOException) {
+                throw e
             } catch (e: Exception) {
-                Log.e(TAG, "OpenRouter translation failed (${e.javaClass.simpleName}: ${e.message}) — using fallback params")
-                fallbackParams(metricsContext).also { publishTranslatedParams(it) }
+                Log.e(TAG, "Signal2Style translation failed (${e.javaClass.simpleName}: ${e.message})")
+                throw IOException("Signal2Style error: ${e.message}", e)
             }
         }
 
@@ -104,7 +107,7 @@ class MusicRepository @Inject constructor(
         logChunked("Step 1a system", MENTAL_STATE_SYSTEM)
         logChunked("Step 1a user", metricsContext)
 
-        val rawText = callOpenRouter(
+        val rawText = callSignal2Style(
             apiKey = apiKey,
             systemPrompt = MENTAL_STATE_SYSTEM,
             userMessage = "Biometric sensor snapshot:\n$metricsContext",
@@ -118,7 +121,7 @@ class MusicRepository @Inject constructor(
 
     override suspend fun translateMentalState(mentalState: MentalState, previousParams: SongParams?): SongParams? =
         withContext(Dispatchers.IO) {
-            val apiKey = BuildConfig.OPENROUTER_API_KEY
+            val apiKey = apiSettings.current.signal2StyleApiKey
             if (apiKey.isBlank()) return@withContext null
             try {
                 translateMentalStateToParams(mentalState, apiKey, previousParams)?.also { publishTranslatedParams(it) }
@@ -153,7 +156,7 @@ class MusicRepository @Inject constructor(
         logChunked("Step 1b system", SONG_PARAMS_FROM_MENTAL_STATE_SYSTEM)
         logChunked("Step 1b user", userMessage)
 
-        val rawText = callOpenRouter(
+        val rawText = callSignal2Style(
             apiKey = apiKey,
             systemPrompt = SONG_PARAMS_FROM_MENTAL_STATE_SYSTEM,
             userMessage = userMessage,
@@ -169,7 +172,7 @@ class MusicRepository @Inject constructor(
         Log.d(TAG, "Single-query fallback: translating metrics directly")
         logChunked("Single-query system", SYSTEM_INSTRUCTION)
 
-        val rawText = callOpenRouter(
+        val rawText = callSignal2Style(
             apiKey = apiKey,
             systemPrompt = SYSTEM_INSTRUCTION,
             userMessage = "Biometric & environmental snapshot:\n$metricsContext",
@@ -179,32 +182,36 @@ class MusicRepository @Inject constructor(
         return parseSongParams(extractJson(rawText))
     }
 
-    // ── OpenRouter call with retry ────────────────────────────────────────────
+    // ── Signal2Style call with retry ────────────────────────────────────────────
 
     @Suppress("UNCHECKED_CAST")
-    private suspend fun callOpenRouter(
+    private suspend fun callSignal2Style(
         apiKey: String,
         systemPrompt: String,
         userMessage: String,
         label: String,
     ): String? {
+        val settings = apiSettings.current
         val bodyJson = moshi.adapter(Map::class.java as Class<Map<String, Any>>).toJson(mapOf(
-            "model" to OPENROUTER_MODEL,
+            "model" to settings.signal2StyleModel,
             "messages" to listOf(
                 mapOf("role" to "system", "content" to systemPrompt),
                 mapOf("role" to "user", "content" to userMessage),
             ),
             "temperature" to 0.7,
+            "max_tokens" to 128,
+            "stream" to false,
+            "response_format" to mapOf("type" to "json_object"),
         ))
         val request = Request.Builder()
-            .url("$OPENROUTER_BASE_URL/chat/completions")
+            .url("${settings.signal2StyleBaseUrl}/chat/completions")
             .header("Authorization", "Bearer $apiKey")
             .header("HTTP-Referer", "https://cadence.music")
             .header("X-Title", "Cadence")
             .post(bodyJson.toRequestBody(JSON))
             .build()
 
-        Log.d(TAG, "OpenRouter → POST /chat/completions model=$OPENROUTER_MODEL [$label]")
+        Log.d(TAG, "Signal2Style → POST /chat/completions model=${settings.signal2StyleModel} [$label]")
 
         var lastCode = -1
         var lastErrBody = ""
@@ -217,27 +224,27 @@ class MusicRepository @Inject constructor(
                     if (!response.isSuccessful) {
                         lastCode = response.code
                         lastErrBody = response.body?.string()?.take(300).orEmpty()
-                        Log.w(TAG, "OpenRouter [$label] ← HTTP ${response.code} in ${elapsed}ms (attempt $attempt/$MAX_ATTEMPTS) — $lastErrBody")
+                        Log.w(TAG, "Signal2Style [$label] ← HTTP ${response.code} in ${elapsed}ms (attempt $attempt/$MAX_ATTEMPTS) — $lastErrBody")
                         null
                     } else {
                         val raw = response.body?.string().orEmpty()
-                        Log.d(TAG, "OpenRouter [$label] ← HTTP ${response.code} in ${elapsed}ms (${raw.length}B)")
+                        Log.d(TAG, "Signal2Style [$label] ← HTTP ${response.code} in ${elapsed}ms (${raw.length}B)")
                         val content = extractContent(raw)
                         if (content.isNullOrBlank()) {
                             // Log a window around the first non-whitespace character to reveal the actual content
                             val firstNonWs = raw.indexOfFirst { !it.isWhitespace() }
                             val snippet = if (firstNonWs >= 0) raw.substring(firstNonWs, minOf(firstNonWs + 400, raw.length)) else "(all whitespace)"
-                            Log.w(TAG, "OpenRouter [$label] empty content — first non-ws at $firstNonWs: $snippet")
+                            Log.w(TAG, "Signal2Style [$label] empty content — first non-ws at $firstNonWs: $snippet")
                             null
                         } else {
-                            Log.d(TAG, "OpenRouter [$label] content (${content.length}B): ${content.take(400)}")
+                            Log.d(TAG, "Signal2Style [$label] content (${content.length}B): ${content.take(400)}")
                             content
                         }
                     }
                 }
             } catch (e: java.net.SocketTimeoutException) {
                 lastCode = -1
-                Log.w(TAG, "OpenRouter [$label] timed out (attempt $attempt/$MAX_ATTEMPTS)")
+                Log.w(TAG, "Signal2Style [$label] timed out (attempt $attempt/$MAX_ATTEMPTS)")
                 null
             }
 
@@ -246,10 +253,10 @@ class MusicRepository @Inject constructor(
             val retriable = lastCode == -1 || lastCode == 429 || lastCode in 500..599
             if (!retriable || attempt == MAX_ATTEMPTS) break
             val backoffMs = 2000L * (1 shl (attempt - 1))
-            Log.d(TAG, "OpenRouter [$label] retrying after ${backoffMs}ms (HTTP $lastCode)")
+            Log.d(TAG, "Signal2Style [$label] retrying after ${backoffMs}ms (HTTP $lastCode)")
             delay(backoffMs)
         }
-        Log.w(TAG, "OpenRouter [$label] gave up after $MAX_ATTEMPTS attempts (last HTTP $lastCode)")
+        Log.w(TAG, "Signal2Style [$label] gave up after $MAX_ATTEMPTS attempts (last HTTP $lastCode)")
         return null
     }
 
@@ -407,8 +414,6 @@ class MusicRepository @Inject constructor(
         private const val TAG = "MusicRepository"
         private val JSON = "application/json; charset=utf-8".toMediaType()
 
-        private const val OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-        private const val OPENROUTER_MODEL = "openrouter/free"
         private const val MAX_ATTEMPTS = 3
 
         private val AUTO_PROMPT_TYPES = setOf(

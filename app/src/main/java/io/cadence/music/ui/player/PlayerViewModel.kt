@@ -60,6 +60,9 @@ class PlayerViewModel @Inject constructor(
     val playbackProgress: StateFlow<PlaybackProgress> = orchestrator.playbackProgress
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PlaybackProgress())
 
+    val hasPrevious: StateFlow<Boolean> = orchestrator.hasPrevious
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
     val tasteMemory: StateFlow<UserTasteMemory> = orchestrator.tasteMemory
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UserTasteMemory())
 

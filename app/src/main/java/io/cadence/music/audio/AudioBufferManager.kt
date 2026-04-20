@@ -9,6 +9,7 @@ import io.cadence.music.data.model.GeneratedSong
 import io.cadence.music.data.model.MentalState
 import io.cadence.music.data.model.Scene
 import io.cadence.music.data.model.SensorState
+import io.cadence.music.data.session.LastSessionParamsStore
 import io.cadence.music.domain.ParamsBuilder
 import io.cadence.music.domain.PromptBuilder
 import kotlinx.coroutines.CancellationException
@@ -38,7 +39,7 @@ import javax.inject.Singleton
  *
  * Context changes (scene shift, HR drift) call [drainAndReprime], which cancels the
  * in-flight request, flushes stale chunks, and restarts — reusing the session [SongParams].
- * Only [prime] (called on explicit start) clears the cached params to re-query OpenRouter.
+ * Only [prime] (called on explicit start) clears the cached params to re-query Signal2Style.
  */
 @Singleton
 class AudioBufferManager @Inject constructor(
@@ -46,6 +47,8 @@ class AudioBufferManager @Inject constructor(
     private val paramsBuilder: ParamsBuilder,
     private val promptBuilder: PromptBuilder,
     private val userAdjustmentRepository: UserAdjustmentRepository,
+    private val lastSessionParams: LastSessionParamsStore,
+    private val audioCacheDir: File,
 ) {
     // Holds pre-generated chunk files ready for ExoPlayer. Sized to buffer ~2 full songs
     // (each 90 s song produces ~3 chunks).
@@ -66,10 +69,10 @@ class AudioBufferManager @Inject constructor(
     @Volatile private var sessionMentalState: MentalState? = null
 
     /**
-     * Params fetched from OpenRouter at the start of a session (or after a user adjustment).
+     * Params fetched from Signal2Style at the start of a session (or after a user adjustment).
      * Set to null by [prime] and [applyUserAdjustment] so the next generation re-queries
-     * OpenRouter. NOT cleared by [drainAndReprime] — context shifts mid-session reuse the
-     * same style rather than burning another OpenRouter call.
+     * Signal2Style. NOT cleared by [drainAndReprime] — context shifts mid-session reuse the
+     * same style rather than burning another Signal2Style call.
      */
     @Volatile private var sessionParams: SongParams? = null
 
@@ -104,6 +107,13 @@ class AudioBufferManager @Inject constructor(
 
     private val _playbackProgress = MutableStateFlow(PlaybackProgress())
     val playbackProgress: StateFlow<PlaybackProgress> = _playbackProgress
+
+    private val _hasPrevious = MutableStateFlow(false)
+    val hasPrevious: StateFlow<Boolean> = _hasPrevious
+
+    fun updateHasPrevious(value: Boolean) {
+        _hasPrevious.value = value
+    }
 
     fun updateProgress(positionMs: Long, durationMs: Long) {
         _playbackProgress.value = PlaybackProgress(positionMs, durationMs)
@@ -161,24 +171,39 @@ class AudioBufferManager @Inject constructor(
                 val rederived = musicRepository.translateMentalState(sessionMentalState!!, previousSongParams)
                 if (rederived != null) {
                     sessionParams = rederived
+                    persistSessionParams(rederived, sessionMentalState, scene, state.heartRate)
                     Log.d(TAG, "Worker: Step 1b re-query done — descriptions=${rederived.descriptions}")
                     rederived
                 } else {
                     Log.w(TAG, "Worker: Step 1b re-query failed — falling back to full re-query")
-                    paramsBuilder.buildParams(state, scene).also {
-                        sessionMentalState = musicRepository.translatedMentalState.value
-                        sessionParams = it
-                        Log.d(TAG, "Worker: full re-query fallback done — descriptions=${it.descriptions}")
+                    try {
+                        paramsBuilder.buildParams(state, scene).also {
+                            sessionMentalState = musicRepository.translatedMentalState.value
+                            sessionParams = it
+                            persistSessionParams(it, sessionMentalState, scene, state.heartRate)
+                            Log.d(TAG, "Worker: full re-query fallback done — descriptions=${it.descriptions}")
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Worker: Step 1 failed — stopping generation: ${e.message}")
+                        _lastError.value = e.message ?: "AI style service unavailable"
+                        return
                     }
                 }
             }
 
             else -> {
                 Log.d(TAG, "Worker: new session — running full re-query (Step 1a + 1b)")
-                paramsBuilder.buildParams(state, scene).also {
-                    sessionMentalState = musicRepository.translatedMentalState.value
-                    sessionParams = it
-                    Log.d(TAG, "Worker: OpenRouter params fetched — descriptions=${it.descriptions} type=${it.auto_prompt_audio_type}")
+                try {
+                    paramsBuilder.buildParams(state, scene).also {
+                        sessionMentalState = musicRepository.translatedMentalState.value
+                        sessionParams = it
+                        persistSessionParams(it, sessionMentalState, scene, state.heartRate)
+                        Log.d(TAG, "Worker: Signal2Style params fetched — descriptions=${it.descriptions} type=${it.auto_prompt_audio_type}")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Worker: Step 1 failed — stopping generation: ${e.message}")
+                    _lastError.value = e.message ?: "AI style service unavailable"
+                    return
                 }
             }
         }
@@ -190,6 +215,14 @@ class AudioBufferManager @Inject constructor(
             Log.d(TAG, "Worker: epoch changed before streaming — discarding")
             return
         }
+
+        // Pre-trigger next song generation NOW so its Step 1b (LLM call) overlaps
+        // with this song's Step 2 (audio generation). This eliminates the ~5-10s
+        // LLM latency from the gap between songs.
+        previousSongParams = params
+        sessionParams = null
+        Log.d(TAG, "Worker: pre-triggering next song before Step 2")
+        requestChannel.trySend(Unit)
 
         var firstChunk = true
         musicRepository.generateAudioStream(params).collect { chunk ->
@@ -203,13 +236,6 @@ class AudioBufferManager @Inject constructor(
                     if (firstChunk) {
                         firstChunk = false
                         recordSong(params)
-                        // Pre-trigger next song generation while this one is still streaming.
-                        // Save params for Step 1b variety and clear sessionParams so the next
-                        // song re-runs Step 1b. sessionMentalState is kept.
-                        previousSongParams = params
-                        sessionParams = null
-                        Log.d(TAG, "Worker: first chunk received — pre-triggering next song")
-                        requestChannel.trySend(Unit)
                     }
                     Log.d(TAG, "Worker: queuing chunk ${chunk.index} (${chunk.file.name})")
                     queue.send(chunk.file)
@@ -217,7 +243,11 @@ class AudioBufferManager @Inject constructor(
                 }
                 is StreamingChunk.Error -> {
                     Log.e(TAG, "Worker: stream error — ${chunk.message}")
-                    if (myEpoch == generationEpoch) _lastError.value = chunk.message
+                    if (myEpoch == generationEpoch) {
+                        _lastError.value = chunk.message
+                        // Restore params so the pre-triggered retry reuses them without burning Step 1b
+                        sessionParams = params
+                    }
                 }
                 StreamingChunk.Complete -> {
                     Log.d(TAG, "Worker: stream complete")
@@ -238,23 +268,50 @@ class AudioBufferManager @Inject constructor(
     }
 
     /**
+     * Deletes all MP3 files in the audio cache directory.
+     * Called at session start to remove leftover files from previous sessions.
+     */
+    fun cleanAudioCache() {
+        audioCacheDir.listFiles()?.forEach { file ->
+            if (file.name.endsWith(".mp3") && file.delete()) {
+                Log.d(TAG, "Cleaned old file: ${file.name}")
+            }
+        }
+        _hasPrevious.value = false
+    }
+
+    /**
      * Start a new playback session. Clears both the cached [MentalState] and [SongParams]
      * so the next generation runs the full Step 1a + 1b pipeline with fresh biometrics.
      * Does NOT bump the epoch.
+     *
+     * Fast path: if a recent session's params are still representative (same scene, HR
+     * within ±15 bpm, saved <10 min ago), reuse them to skip Step 1 entirely on song #1.
      */
-    fun prime(sensorState: SensorState, scene: Scene?) {
-        sessionMentalState = null  // re-estimate mental state for the new session
-        sessionParams = null       // force full OpenRouter re-query
-        previousSongParams = null  // don't carry style history across sessions
+    suspend fun prime(sensorState: SensorState, scene: Scene?) {
+        cleanAudioCache()
+        sessionMentalState = null
+        sessionParams = null
+        previousSongParams = null
         _currentMetricsContext.value = ""
         _currentSongParams.value = null
         _currentMentalState.value = null
+
+        val cached = lastSessionParams.load()
+        if (cached != null && lastSessionParams.isFreshFor(cached, scene, sensorState.heartRate)) {
+            Log.d(TAG, "prime: reusing persisted params (age=${(System.currentTimeMillis() - cached.savedAtMs) / 1000}s, scene=${cached.scene}, hr=${cached.heartRate})")
+            sessionParams = cached.params
+            sessionMentalState = cached.mentalState
+            _currentSongParams.value = cached.params
+            _currentMentalState.value = cached.mentalState
+        }
+
         enqueueGeneration(sensorState, scene)
     }
 
     /**
      * Applies a user-initiated music adjustment (genre, energy, free text).
-     * Clears [sessionParams] so the next generation re-queries OpenRouter with the updated
+     * Clears [sessionParams] so the next generation re-queries Signal2Style with the updated
      * preference hint injected via [UserAdjustmentRepository]. After that one call the result
      * is cached as the new [sessionParams] for the rest of the session.
      */
@@ -268,7 +325,7 @@ class AudioBufferManager @Inject constructor(
      * context. Bumps the epoch so stale results are discarded.
      *
      * Does NOT clear [sessionParams] — mid-session context shifts (HR drift, scene change)
-     * reuse the style established at session start rather than burning another OpenRouter call.
+     * reuse the style established at session start rather than burning another Signal2Style call.
      */
     fun drainAndReprime(sensorState: SensorState, scene: Scene?) {
         cancelActiveJobs()
@@ -339,6 +396,17 @@ class AudioBufferManager @Inject constructor(
 
     fun updateScene(scene: Scene?) {
         currentScene = scene
+    }
+
+    private fun persistSessionParams(
+        params: SongParams,
+        mentalState: MentalState?,
+        scene: Scene?,
+        heartRate: Int,
+    ) {
+        scope.launch {
+            lastSessionParams.save(params, mentalState, scene, heartRate)
+        }
     }
 
     private fun cancelActiveJobs() {

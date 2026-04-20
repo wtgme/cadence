@@ -22,8 +22,12 @@ android {
         versionCode = 1
         versionName = "0.2.0"
 
-        buildConfigField("String", "SONGGEN_BASE_URL", "\"${localProps.getProperty("songgen.base.url", "http://82.10.52.198:8000")}\"")
-        buildConfigField("String", "OPENROUTER_API_KEY", "\"${localProps.getProperty("openrouter.api.key", "")}\"")
+        buildConfigField("String", "SIGNAL2STYLE_BASE_URL", "\"${localProps.getProperty("signal2style.base.url", "https://openrouter.ai/api/v1")}\"")
+        buildConfigField("String", "SIGNAL2STYLE_API_KEY", "\"${localProps.getProperty("signal2style.api.key", "")}\"")
+        buildConfigField("String", "SIGNAL2STYLE_MODEL", "\"${localProps.getProperty("signal2style.model", "openrouter/free")}\"")
+        buildConfigField("String", "SONGGEN_BASE_URL", "\"${localProps.getProperty("songgen.base.url", "https://api.cadencemusics.uk/v1/music_generation")}\"")
+        buildConfigField("String", "SONGGEN_API_KEY", "\"${localProps.getProperty("songgen.api.key", "")}\"")
+        buildConfigField("String", "SONGGEN_MODEL", "\"${localProps.getProperty("songgen.model", "SongGeneration-v2-large")}\"")
     }
 
     buildTypes {

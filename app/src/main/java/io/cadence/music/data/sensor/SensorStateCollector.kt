@@ -118,7 +118,7 @@ class SensorStateCollector @Inject constructor(
         healthDataManager.refresh()
         healthExtrasRepository.refresh()
         sleepRepository.refresh()
-        val loc = locationRepository.locationData.first()
+        val loc = locationRepository.currentOrLastKnown()
         weatherRepository.refresh(loc.latitude, loc.longitude, force = true)
     }
 

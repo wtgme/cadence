@@ -8,11 +8,13 @@ import io.cadence.music.BuildConfig
 import io.cadence.music.ui.debug.DebugScreen
 import io.cadence.music.ui.permissions.PermissionsScreen
 import io.cadence.music.ui.player.PlayerScreen
+import io.cadence.music.ui.settings.SettingsScreen
 
 private object Routes {
     const val PERMISSIONS = "permissions"
     const val PLAYER = "player"
     const val DEBUG = "debug"
+    const val SETTINGS = "settings"
 }
 
 @Composable
@@ -31,7 +33,13 @@ fun CadenceNavHost() {
         }
 
         composable(Routes.PLAYER) {
-            PlayerScreen()
+            PlayerScreen(
+                onNavigateToSettings = { navController.navigate(Routes.SETTINGS) },
+            )
+        }
+
+        composable(Routes.SETTINGS) {
+            SettingsScreen(onBack = { navController.popBackStack() })
         }
 
         // Debug screen only available in debug builds

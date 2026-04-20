@@ -7,6 +7,8 @@ import io.cadence.music.data.api.StreamingChunk
 import io.cadence.music.data.model.MentalState
 import io.cadence.music.data.model.Scene
 import io.cadence.music.data.model.SensorState
+import io.cadence.music.data.session.CachedSessionParams
+import io.cadence.music.data.session.LastSessionParamsStore
 import io.cadence.music.domain.ParamsBuilder
 import io.cadence.music.domain.PromptBuilder
 import kotlinx.coroutines.flow.Flow
@@ -33,33 +35,62 @@ class AudioBufferManagerTest {
     val tmpFolder = TemporaryFolder()
 
     private val fakeSongParams = SongParams(lyric = ".", descriptions = "electronic,energetic")
+    private val fakeMentalState = MentalState(
+        arousal = 5, valence = 0, stress = 3, energy = 5, focus = 5,
+        mood = "neutral", rawLlmText = "",
+    )
 
     private fun fakeFile(name: String): File = tmpFolder.newFile(name).also { it.writeText("x") }
 
-    private val alwaysInstParamsBuilder = object : ParamsBuilder {
-        override suspend fun buildParams(state: SensorState, scene: Scene?) = fakeSongParams
-    }
-
-    // streamBlock is last so callers can use trailing lambda syntax.
+    /**
+     * streamBlock is last so callers can use trailing lambda syntax.
+     * [builderFactory] gets the mock's mutable mental-state flow so custom builders can
+     * populate it — mirroring production where [ParamsBuilder.buildParams] triggers
+     * [GenerationRepository.translateMetrics] which sets [GenerationRepository.translatedMentalState].
+     */
     private fun makeManager(
-        paramsBuilder: ParamsBuilder = alwaysInstParamsBuilder,
+        builderFactory: ((MutableStateFlow<MentalState?>) -> ParamsBuilder)? = null,
         streamBlock: (Int) -> Flow<StreamingChunk>,
     ): AudioBufferManager {
         var callCount = 0
+        val mentalStateFlow = MutableStateFlow<MentalState?>(null)
         val repo = object : GenerationRepository {
             override val translatedSongParams = MutableStateFlow<SongParams?>(null)
-            override val translatedMentalState = MutableStateFlow<MentalState?>(null)
+            override val translatedMentalState: MutableStateFlow<MentalState?> = mentalStateFlow
             override suspend fun translateMetrics(ctx: String) = fakeSongParams
             override suspend fun translateMentalState(mentalState: MentalState, previousParams: SongParams?) = fakeSongParams
             override fun generateAudioStream(params: SongParams): Flow<StreamingChunk> =
                 streamBlock(++callCount)
         }
+        val builder = builderFactory?.invoke(mentalStateFlow) ?: object : ParamsBuilder {
+            override suspend fun buildParams(state: SensorState, scene: Scene?): SongParams {
+                mentalStateFlow.value = fakeMentalState
+                return fakeSongParams
+            }
+        }
         return AudioBufferManager(
             musicRepository = repo,
-            paramsBuilder = paramsBuilder,
+            paramsBuilder = builder,
             promptBuilder = PromptBuilder(),
             userAdjustmentRepository = UserAdjustmentRepository(),
+            lastSessionParams = NoOpLastSessionParamsStore,
+            audioCacheDir = tmpFolder.newFolder("audio_cache"),
         )
+    }
+
+    private object NoOpLastSessionParamsStore : LastSessionParamsStore {
+        override suspend fun load(): CachedSessionParams? = null
+        override suspend fun save(
+            params: SongParams,
+            mentalState: MentalState?,
+            scene: Scene?,
+            heartRate: Int,
+        ) {}
+        override fun isFreshFor(
+            cached: CachedSessionParams,
+            currentScene: Scene?,
+            currentHr: Int,
+        ): Boolean = false
     }
 
     /** Emits N Audio chunks then Complete. */
@@ -141,35 +172,39 @@ class AudioBufferManagerTest {
     }
 
     @Test
-    fun `drainAndReprime reuses session params without re-querying OpenRouter`(): Unit = runBlocking {
+    fun `drainAndReprime reuses session params without re-querying Signal2Style`(): Unit = runBlocking {
         val buildCount = AtomicInteger(0)
-        val countingBuilder = object : ParamsBuilder {
-            override suspend fun buildParams(state: SensorState, scene: Scene?): SongParams {
-                buildCount.incrementAndGet()
-                return fakeSongParams
-            }
-        }
-        val manager = makeManager(paramsBuilder = countingBuilder) { _ -> chunkStream(1) }
+        val manager = makeManager(
+            builderFactory = { mentalStateFlow ->
+                object : ParamsBuilder {
+                    override suspend fun buildParams(state: SensorState, scene: Scene?): SongParams {
+                        buildCount.incrementAndGet()
+                        mentalStateFlow.value = fakeMentalState
+                        return fakeSongParams
+                    }
+                }
+            },
+        ) { _ -> chunkStream(1) }
 
-        // Start session — first call should query OpenRouter (buildParams)
+        // Start session — first call should query Signal2Style (buildParams)
         manager.prime(SensorState(), Scene.RESTING)
         withTimeout(5_000) {
             manager.chunksReady.first { it >= 1 }
         }
-        assertEquals("Expected exactly 1 OpenRouter call after prime", 1, buildCount.get())
+        assertEquals("Expected exactly 1 Signal2Style call after prime", 1, buildCount.get())
 
-        // Mid-session context shift — should NOT re-query OpenRouter
+        // Mid-session context shift — should NOT re-query Signal2Style
         manager.drainAndReprime(SensorState(), Scene.RUNNING)
         withTimeout(5_000) {
             manager.chunksReady.first { it >= 1 }
         }
-        assertEquals("drainAndReprime must not re-query OpenRouter", 1, buildCount.get())
+        assertEquals("drainAndReprime must not re-query Signal2Style", 1, buildCount.get())
 
-        // Stop + start again — should re-query OpenRouter with fresh biometrics
+        // Stop + start again — should re-query Signal2Style with fresh biometrics
         manager.prime(SensorState(), Scene.WALKING)
         withTimeout(5_000) {
             manager.chunksReady.first { it >= 2 }
         }
-        assertEquals("Second prime must trigger a new OpenRouter call", 2, buildCount.get())
+        assertEquals("Second prime must trigger a new Signal2Style call", 2, buildCount.get())
     }
 }

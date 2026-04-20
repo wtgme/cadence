@@ -12,7 +12,7 @@ sealed class GenerationResult {
 
 interface GenerationRepository {
     /**
-     * Params emitted as soon as Step 1 (OpenRouter) completes, before the much slower
+     * Params emitted as soon as Step 1 (Signal2Style) completes, before the much slower
      * Step 2 (audio rendering). UI observers can show style/lyrics while audio renders.
      */
     val translatedSongParams: StateFlow<SongParams?>

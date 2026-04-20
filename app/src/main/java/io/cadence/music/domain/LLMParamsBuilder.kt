@@ -8,11 +8,11 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Builds [SongParams] by calling OpenRouter once per session.
+ * Builds [SongParams] by calling Signal2Style once per session.
  *
  * Translates the current biometric + scene snapshot into lyrics and style tags via
  * [GenerationRepository.translateMetrics]. Falls back to rule-based params automatically
- * if OpenRouter is unavailable (handled inside [translateMetrics]).
+ * if Signal2Style is unavailable (handled inside [translateMetrics]).
  *
  * This is called only once per playback session — [AudioBufferManager] caches the result
  * in [sessionParams] and reuses it for every subsequent song until the user stops and

@@ -15,7 +15,7 @@ import kotlinx.coroutines.flow.StateFlow
  *   -1.0 = skipped early (<10%)
  *
  * Use [buildTasteContext] to get a concise string ready for injection into
- * the OpenRouter Step 1b prompt (mental state → song params).
+ * the Signal2Style Step 1b prompt (mental state → song params).
  */
 interface TasteMemoryRepository {
 

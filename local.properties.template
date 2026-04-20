@@ -1,14 +1,20 @@
-# Copy this file to local.properties and fill in your keys.
+# Copy this file to local.properties and fill in your values.
 # local.properties is git-ignored — never commit API keys.
 
 sdk.dir=/path/to/android/sdk
 
-# Gemini API key — required for prompt translation via Google Gemini.
-# Obtain from https://aistudio.google.com/app/apikey
-gemini.api.key=YOUR_GEMINI_API_KEY
+# ── Step 1: Signal2Style (biometrics → song style) ──────────────────────────
+# Any OpenAI-compatible chat/completions endpoint.
+# Examples:
+#   OpenRouter : https://openrouter.ai/api/v1
+#   Self-hosted: https://chat.cadencemusics.uk/v1
+signal2style.base.url=https://chat.cadencemusics.uk/v1
+signal2style.api.key=YOUR_API_KEY_OR_DUMMY_IF_SELF_HOSTED
+signal2style.model=google/gemma-4-26B-A4B-it
 
-# Self-hosted server URLs (MusicGen remains on the local server for audio generation)
-songgen.base.url=http://82.10.52.198:8000
-
-# Legacy Gemma URL — no longer used; Gemini replaces Gemma for prompt translation.
-# gemma.base.url=http://82.10.52.198:8001
+# ── Step 2: SongGeneration (song style → MP3) ───────────────────────────────
+# Use http://10.0.2.2:8888/v1/music_generation for emulator against a local server,
+# or http://<phone-ip>:8888/v1/music_generation for a physical device on the same LAN.
+songgen.base.url=https://api.cadencemusics.uk/v1/music_generation
+songgen.api.key=YOUR_API_KEY_OR_DUMMY_IF_SELF_HOSTED
+songgen.model=SongGeneration-v2-large

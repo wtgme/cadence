@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="screenshots/logo.svg" width="128" alt="Cadence logo"/>
+
 # Cadence
 
 ### Biometric-Adaptive Music for Real-Time Mood Regulation
@@ -7,7 +9,6 @@
 [![Platform](https://img.shields.io/badge/platform-Android%2010%2B-3DDC84?logo=android&logoColor=white)](https://developer.android.com)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
 [![Google Play](https://img.shields.io/badge/Google%20Play-Under%20Review-414141?logo=googleplay&logoColor=white)](https://play.google.com)
-[![Research](https://img.shields.io/badge/Research-IoPPN%20KCL-003D8F)](https://www.kcl.ac.uk/ioppn)
 
 **Cadence** continuously reads your physiological state and generates personalised instrumental music in real time — grounded in the *iso-principle*: matching music to your current state before gradually steering it toward a desired emotional target.
 
@@ -146,12 +147,6 @@ app/
 ├── domain/       SceneDetector · SceneStateMachine · PromptBuilder · ReadinessCalculator
 └── di/           Hilt modules
 ```
-
----
-
-## Research Affiliation
-
-This prototype is being evaluated in a feasibility study investigating biometric-adaptive music for everyday mood regulation and wellbeing, conducted at the [Institute of Psychiatry, Psychology & Neuroscience (IoPPN)](https://www.kcl.ac.uk/ioppn), King's College London.
 
 ---
 

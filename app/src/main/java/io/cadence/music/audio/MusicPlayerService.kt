@@ -18,6 +18,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.File
 import javax.inject.Inject
@@ -37,6 +38,9 @@ class MusicPlayerService : MediaSessionService() {
 
     // Files queued into ExoPlayer in order — head is the currently playing file
     private val enqueuedFiles = ArrayDeque<File>()
+
+    // Songs that have finished playing — kept on disk for "previous" navigation
+    private val playedFiles = mutableListOf<File>()
 
     override fun onCreate() {
         super.onCreate()
@@ -75,7 +79,9 @@ class MusicPlayerService : MediaSessionService() {
                     return
                 }
                 enqueuedFiles.removeFirstOrNull()?.let { played ->
-                    if (played.delete()) Log.d(TAG, "Deleted: ${played.name}")
+                    playedFiles.add(played)
+                    bufferManager.updateHasPrevious(true)
+                    Log.d(TAG, "Moved to history: ${played.name} (history=${playedFiles.size})")
                 }
                 Log.d(TAG, "Chunk auto-advanced — pre-fetching next (queued=${enqueuedFiles.size})")
                 // Feed the next buffered chunk into ExoPlayer immediately.
@@ -116,13 +122,7 @@ class MusicPlayerService : MediaSessionService() {
         when (intent?.action) {
             ACTION_PLAY -> if (!isPlaying) { isPlaying = true; startFeedLoop(); startPositionUpdates() }
             ACTION_SKIP_NEXT -> skipToNext()
-            ACTION_SKIP_PREV -> {
-                player.seekTo(0)
-                if (player.playbackState == Player.STATE_ENDED) {
-                    player.prepare()
-                    player.play()
-                }
-            }
+            ACTION_SKIP_PREV -> skipToPrevious()
             ACTION_SEEK -> {
                 val pos = intent.getLongExtra(EXTRA_SEEK_POSITION_MS, 0L)
                 player.seekTo(pos)
@@ -138,8 +138,11 @@ class MusicPlayerService : MediaSessionService() {
         feedJob?.cancel()
         positionJob?.cancel()
         bufferManager.updateProgress(0L, 0L)
+        playedFiles.forEach { it.delete() }
+        playedFiles.clear()
         enqueuedFiles.forEach { it.delete() }
         enqueuedFiles.clear()
+        bufferManager.updateHasPrevious(false)
         // Stop and clear the player before releasing so ExoPlayer doesn't emit
         // STATE_IDLE after mediaSession.release() has torn down its LegacyMessageQueue
         // handler — which would produce an IllegalStateException on a "dead thread".
@@ -162,15 +165,53 @@ class MusicPlayerService : MediaSessionService() {
         }
     }
 
+    private fun skipToPrevious() {
+        if (playedFiles.isEmpty()) {
+            // No history — just restart current song
+            player.seekTo(0)
+            if (player.playbackState == Player.STATE_ENDED) {
+                player.prepare()
+                player.play()
+            }
+            return
+        }
+
+        val previousFile = playedFiles.removeLast()
+        bufferManager.updateHasPrevious(playedFiles.isNotEmpty())
+
+        // Save all currently enqueued files
+        val currentFiles = enqueuedFiles.toList()
+        enqueuedFiles.clear()
+        player.stop()
+        player.clearMediaItems()
+
+        // Build new playlist: previous song + current files
+        enqueuedFiles.addLast(previousFile)
+        player.addMediaItem(MediaItem.fromUri(Uri.fromFile(previousFile)))
+        for (file in currentFiles) {
+            enqueuedFiles.addLast(file)
+            player.addMediaItem(MediaItem.fromUri(Uri.fromFile(file)))
+        }
+
+        player.seekTo(0, 0)
+        player.prepare()
+        player.play()
+        Log.d(TAG, "Skipped to previous: ${previousFile.name} (history=${playedFiles.size})")
+    }
+
     private fun skipToNext() {
         if (player.hasNextMediaItem()) {
             // Song already pre-loaded in ExoPlayer — instant skip
             player.seekToNextMediaItem()
         } else {
-            // Next song is still being generated. Stop the current song immediately
-            // so the user sees something happen, then let the already-running
+            // Next song is still being generated. Move current to history, stop
+            // playback so the user sees something happen, then let the already-running
             // feedNextChunk() coroutine deliver the next song when ready.
             // enqueueFile() handles STATE_IDLE and will auto-resume + pre-fetch.
+            enqueuedFiles.removeFirstOrNull()?.let { current ->
+                playedFiles.add(current)
+                bufferManager.updateHasPrevious(true)
+            }
             enqueuedFiles.forEach { it.delete() }
             enqueuedFiles.clear()
             player.clearMediaItems()
@@ -185,14 +226,68 @@ class MusicPlayerService : MediaSessionService() {
     private fun startFeedLoop() {
         feedJob?.cancel()
         feedJob = scope.launch {
+            // Welcome bridge: if res/raw/welcome_pad is present, play it on loop at low volume
+            // while the first real chunk is generating. Gives the user immediate audio feedback
+            // rather than silent dead-air during the ~20–40s cold start.
+            val welcomeStarted = maybeStartWelcomePad()
+
             val first = bufferManager.takeNext() ?: run {
                 Log.w(TAG, "Buffer returned null — no audio to play")
                 return@launch
             }
+
+            if (welcomeStarted) {
+                fadeOutWelcomePad()
+            }
+
             // enqueueFile() detects STATE_IDLE and handles prepare/play/feedNextChunk
             enqueueFile(first)
             Log.d(TAG, "Feed loop started: ${first.name}")
         }
+    }
+
+    /**
+     * Plays `res/raw/welcome_pad` on loop at ~30% volume if the asset is present.
+     * Returns true if the pad was started; false otherwise (no asset, or error).
+     */
+    private fun maybeStartWelcomePad(): Boolean {
+        val padResId = resources.getIdentifier("welcome_pad", "raw", packageName)
+        if (padResId == 0) {
+            Log.d(TAG, "No welcome_pad asset — starting silently")
+            return false
+        }
+        return try {
+            val uri = Uri.parse("android.resource://$packageName/$padResId")
+            player.setMediaItem(MediaItem.fromUri(uri))
+            player.repeatMode = Player.REPEAT_MODE_ONE
+            player.volume = WELCOME_PAD_VOLUME
+            player.prepare()
+            player.play()
+            Log.d(TAG, "Welcome pad playing (res=$padResId, volume=$WELCOME_PAD_VOLUME)")
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "Welcome pad start failed: ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * Fades pad volume to zero over [WELCOME_FADE_MS], then clears the player so the
+     * first real chunk starts from a clean state with full volume.
+     */
+    private suspend fun fadeOutWelcomePad() {
+        val steps = 10
+        val stepMs = WELCOME_FADE_MS / steps
+        val startVol = player.volume
+        for (i in 1..steps) {
+            if (!scope.isActive) return
+            player.volume = startVol * (1f - i.toFloat() / steps)
+            delay(stepMs)
+        }
+        player.stop()
+        player.clearMediaItems()
+        player.repeatMode = Player.REPEAT_MODE_OFF
+        player.volume = 1f
     }
 
     private fun feedNextChunk() {
@@ -227,5 +322,7 @@ class MusicPlayerService : MediaSessionService() {
         const val ACTION_SEEK = "io.cadence.music.action.SEEK"
         const val EXTRA_SEEK_POSITION_MS = "seek_position_ms"
         private const val TAG = "MusicPlayerService"
+        private const val WELCOME_PAD_VOLUME = 0.30f
+        private const val WELCOME_FADE_MS = 600L
     }
 }

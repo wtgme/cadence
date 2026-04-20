@@ -20,17 +20,19 @@ adb logcat --pid=$(adb shell pidof -s io.cadence.music.debug) *:V  # Filter logs
 
 **Setup:** Create `local.properties` in the project root with:
 ```
-songgen.base.url=http://10.0.2.2:8888   # emulator; use http://<phone-ip>:8888 for physical device
-openrouter.api.key=<your-key>
+signal2style.base.url=https://openrouter.ai/api/v1   # or any OpenAI-compatible API base URL
+signal2style.api.key=<your-key>
+songgen.base.url=http://10.0.2.2:8888/v1/music_generation   # emulator; use http://<phone-ip>:8888/v1/music_generation for physical device
+songgen.api.key=                                      # leave empty for self-hosted (no auth)
 ```
 
-`songgen.base.url` points at the SongGeneration API (tunnelled to `localhost:8888`). OpenRouter is accessed via `openrouter.api.key`.
+`signal2style.*` configures Step 1 (biometrics → song style, LLM). `songgen.*` configures Step 2 (song generation API).
 
 ## Remote Backend Setup (HPC)
 
 The SongGeneration v2-large inference server runs inside KCL's CREATE HPC cluster. Access requires SSH key auth + MFA via the e-Research Portal.
 
-The **compute node name can change** (currently `erc-hpc-comp232`). Update `REMOTE_HOST` in `scripts/hpc-tunnel.sh` when it does. The working directory `/users/k1810895/data/musicgen` is stable.
+The **compute node name can change** (currently `erc-hpc-comp222`, port `40839`). Update `REMOTE_HOST` and `REMOTE_PORT` in `scripts/hpc-tunnel.sh` when it does. The working directory `/users/k1810895/data/musicgen` is stable.
 
 ### One-time SSH config (already in `~/.ssh/config`)
 ```
@@ -62,11 +64,11 @@ Host erc-hpc-comp*
 ```
 
 The tunnel forwards:
-- `localhost:8888` → `<REMOTE_HOST>:37629` (SongGeneration API)
+- `localhost:8888` → `<REMOTE_HOST>:40839` (SongGeneration API)
 
 Claude can run remote commands and read/edit files via the SSH jump host directly:
 ```bash
-ssh -J k1810895@hpc.create.kcl.ac.uk k1810895@erc-hpc-comp232 "<command>"
+ssh -J k1810895@hpc.create.kcl.ac.uk k1810895@erc-hpc-comp222 "<command>"
 ```
 
 ### Remote server details

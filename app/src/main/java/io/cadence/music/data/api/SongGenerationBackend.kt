@@ -2,7 +2,7 @@ package io.cadence.music.data.api
 
 import android.util.Log
 import io.cadence.music.BuildConfig
-import kotlinx.coroutines.CancellationException
+import io.cadence.music.data.settings.ApiSettingsRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -16,33 +16,24 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.File
+import java.io.FileOutputStream
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Music generation backend backed by the SongGeneration v2-large server.
- *
- * Sends `POST /generate` with `{lyric, descriptions, auto_prompt_audio_type, generate_type}`.
- * The server has no streaming endpoint; [generateStream] wraps [generate] as a single-chunk
- * flow (one complete MP3 per emission), designed for future streaming backends.
- *
- * Retries up to [MAX_ATTEMPTS] times with exponential backoff on transient server errors
- * (503 model-loading, 500/502/504 transient failures). Response body is streamed to disk
- * to avoid holding a 20-50 MB MP3 in memory.
- */
 @Singleton
 class SongGenerationBackend @Inject constructor(
     private val cacheDir: File,
     private val okHttpClient: OkHttpClient,
+    private val apiSettings: ApiSettingsRepository,
 ) : GenerationBackend {
 
-    override val name = "SongGeneration-v2-large"
+    override val name get() = "SongGen-${apiSettings.current.songGenModel}"
 
     private val client = okHttpClient.newBuilder()
         .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(10, TimeUnit.MINUTES)   // generation takes 60-120s
+        .readTimeout(10, TimeUnit.MINUTES)
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
@@ -54,45 +45,37 @@ class SongGenerationBackend @Inject constructor(
                 if (result is GenerationResult.Success) return@withContext result
                 lastError = result as GenerationResult.Error
                 if (!isRetriable(lastError) || attempt == MAX_ATTEMPTS) break
-                val backoffMs = 3000L * (1 shl (attempt - 1))   // 3s, 6s
+                val backoffMs = 3000L * (1 shl (attempt - 1))
                 Log.w(TAG, "$name retrying after ${backoffMs}ms (attempt $attempt/$MAX_ATTEMPTS): ${lastError.message}")
                 delay(backoffMs)
             }
             lastError
         }
 
-    /**
-     * Executes one generation attempt and properly cancels the OkHttp call if the
-     * coroutine is cancelled mid-flight (e.g. user pressed Stop).
-     *
-     * OkHttp's [execute] is a blocking call — coroutine cancellation cannot interrupt
-     * it via a suspension point. [suspendCancellableCoroutine] lets us register an
-     * [invokeOnCancellation] handler that explicitly calls [okhttp3.Call.cancel],
-     * which causes [execute] to throw [IOException] and unblocks the thread.
-     */
     private suspend fun attemptGenerate(params: SongParams): GenerationResult {
+        val settings = apiSettings.current
         val body = JSONObject().apply {
-            put("lyric", params.lyric)
-            params.descriptions?.let { put("descriptions", it) }
-            params.auto_prompt_audio_type?.let { put("auto_prompt_audio_type", it) }
-            put("generate_type", params.generate_type)
+            put("model", settings.songGenModel)
+            put("prompt", params.descriptions ?: "")
+            put("lyrics", params.lyric)
+            put("audio_setting", JSONObject().apply {
+                put("sample_rate", 44100)
+                put("bitrate", 256000)
+                put("format", "mp3")
+            })
         }.toString()
 
-        Log.d(TAG, "$name → POST /generate " +
-            "descriptions=${params.descriptions} " +
-            "auto_prompt_type=${params.auto_prompt_audio_type} " +
-            "type=${params.generate_type}"
-        )
+        Log.d(TAG, "$name → POST /v1/music_generation descriptions=${params.descriptions}")
 
         val request = Request.Builder()
-            .url("${BuildConfig.SONGGEN_BASE_URL}/generate")
+            .url(settings.songGenBaseUrl)
+            .apply { if (settings.songGenApiKey.isNotBlank()) header("Authorization", "Bearer ${settings.songGenApiKey}") }
             .post(body.toRequestBody(JSON))
             .build()
 
         return suspendCancellableCoroutine { cont ->
             val call = client.newCall(request)
 
-            // Cancel the OkHttp call (and unblock the thread) when the coroutine is cancelled
             cont.invokeOnCancellation {
                 Log.d(TAG, "$name: request cancelled — aborting OkHttp call")
                 call.cancel()
@@ -106,21 +89,33 @@ class SongGenerationBackend @Inject constructor(
                         Log.w(TAG, "$name ← $msg")
                         GenerationResult.Error(msg)
                     } else {
-                        val file = File(cacheDir, "music_${System.currentTimeMillis()}.mp3")
-                        response.body?.byteStream()?.use { input ->
-                            file.outputStream().use { output -> input.copyTo(output) }
-                        }
-                        if (file.length() > 0) {
-                            Log.d(TAG, "$name ← ${file.length() / 1024}KB saved as ${file.name}")
-                            GenerationResult.Success(file, params)
+                        val responseJson = JSONObject(response.body?.string() ?: "{}")
+                        val statusCode = responseJson.optJSONObject("base_resp")?.optInt("status_code", -1) ?: -1
+                        if (statusCode != 0) {
+                            val msg = responseJson.optJSONObject("base_resp")?.optString("status_msg") ?: "Unknown error"
+                            Log.w(TAG, "$name ← error: $msg")
+                            GenerationResult.Error(msg)
                         } else {
-                            file.delete()
-                            GenerationResult.Error("No audio data from $name")
+                            val hexAudio = responseJson.optJSONObject("data")?.optString("audio", "") ?: ""
+                            if (hexAudio.isEmpty()) {
+                                GenerationResult.Error("No audio data from $name")
+                            } else {
+                                val audioBytes = hexAudio.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+                                val file = File(cacheDir, "music_${System.currentTimeMillis()}.mp3")
+                                file.writeBytes(audioBytes)
+                                if (file.length() > 0) {
+                                    Log.d(TAG, "$name ← ${file.length() / 1024}KB saved as ${file.name}")
+                                    GenerationResult.Success(file, params)
+                                } else {
+                                    file.delete()
+                                    GenerationResult.Error("No audio data from $name")
+                                }
+                            }
                         }
                     }
                 }
             } catch (e: IOException) {
-                if (cont.isCancelled) return@suspendCancellableCoroutine  // swallow; caller gets CancellationException
+                if (cont.isCancelled) return@suspendCancellableCoroutine
                 Log.e(TAG, "$name generate failed: ${e.message}")
                 GenerationResult.Error(e.message ?: "IO error")
             } catch (e: Exception) {
@@ -143,26 +138,114 @@ class SongGenerationBackend @Inject constructor(
     }
 
     override fun generateStream(params: SongParams): Flow<StreamingChunk> = flow {
-        when (val result = generate(params)) {
-            is GenerationResult.Success -> {
-                emit(StreamingChunk.Audio(result.audioFile, 0, params))
-                emit(StreamingChunk.Complete)
+        if (isDefaultApi()) {
+            streamFromDefaultApi(params).collect { emit(it) }
+        } else {
+            when (val result = generate(params)) {
+                is GenerationResult.Success -> {
+                    emit(StreamingChunk.Audio(result.audioFile, 0, params))
+                    emit(StreamingChunk.Complete)
+                }
+                is GenerationResult.Error -> emit(StreamingChunk.Error(result.message))
             }
-            is GenerationResult.Error -> emit(StreamingChunk.Error(result.message))
         }
     }
 
-    override suspend fun healthCheck(): Boolean = withContext(Dispatchers.IO) {
-        try {
+    private fun isDefaultApi(): Boolean =
+        apiSettings.current.songGenBaseUrl.trimEnd('/') == BuildConfig.SONGGEN_BASE_URL.trimEnd('/')
+
+    private fun streamingUrl(baseUrl: String): String =
+        baseUrl.trimEnd('/').replace(Regex("/v1/music_generation$"), "") + "/generate_stream"
+
+    private fun streamFromDefaultApi(params: SongParams): Flow<StreamingChunk> = flow {
+        val settings = apiSettings.current
+        val url = streamingUrl(settings.songGenBaseUrl)
+        val body = JSONObject().apply {
+            put("model", settings.songGenModel)
+            put("prompt", params.descriptions ?: "")
+            put("lyrics", params.lyric)
+            put("audio_setting", JSONObject().apply {
+                put("sample_rate", 44100)
+                put("bitrate", 256000)
+                put("format", "mp3")
+            })
+            if (params.auto_prompt_audio_type != null) put("auto_prompt_audio_type", params.auto_prompt_audio_type)
+            put("generate_type", params.generate_type)
+        }.toString()
+
+        for (attempt in 1..MAX_ATTEMPTS) {
+            Log.d(TAG, "$name → POST $url (attempt $attempt/$MAX_ATTEMPTS) descriptions=${params.descriptions}")
             val request = Request.Builder()
-                .url("${BuildConfig.SONGGEN_BASE_URL}/health")
-                .get()
+                .url(url)
+                .apply { if (settings.songGenApiKey.isNotBlank()) header("Authorization", "Bearer ${settings.songGenApiKey}") }
+                .post(body.toRequestBody(JSON))
                 .build()
-            client.newCall(request).execute().use { it.isSuccessful }
-        } catch (e: IOException) {
-            false
+
+            var bytesWritten = 0L
+            var file: File? = null
+            val errMsg: String? = try {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        val errBody = response.body?.string()?.take(300).orEmpty()
+                        "HTTP ${response.code}${if (errBody.isNotEmpty()) ": $errBody" else ""}"
+                    } else {
+                        val out = File(cacheDir, "music_${System.currentTimeMillis()}.mp3")
+                        file = out
+                        val t0 = System.currentTimeMillis()
+                        var firstByteMs = -1L
+                        response.body?.byteStream()?.use { input ->
+                            FileOutputStream(out).use { sink ->
+                                val buf = ByteArray(16 * 1024)
+                                while (true) {
+                                    val n = input.read(buf)
+                                    if (n == -1) break
+                                    if (firstByteMs < 0) {
+                                        firstByteMs = System.currentTimeMillis() - t0
+                                        Log.d(TAG, "$name: first bytes after ${firstByteMs}ms")
+                                    }
+                                    sink.write(buf, 0, n)
+                                    bytesWritten += n
+                                }
+                            }
+                        }
+                        Log.d(TAG, "$name ← ${bytesWritten / 1024}KB streamed in ${System.currentTimeMillis() - t0}ms")
+                        null
+                    }
+                }
+            } catch (e: IOException) {
+                "IO error: ${e.message}"
+            } catch (e: Exception) {
+                "Error: ${e.message}"
+            }
+
+            if (errMsg == null && bytesWritten > 0 && file != null) {
+                emit(StreamingChunk.Audio(file!!, 0, params))
+                emit(StreamingChunk.Complete)
+                return@flow
+            }
+
+            file?.takeIf { it.exists() }?.delete()
+            val retriable = errMsg != null && isRetriableMessage(errMsg) && bytesWritten == 0L
+            if (!retriable || attempt == MAX_ATTEMPTS) {
+                Log.w(TAG, "$name stream failed (attempt $attempt): $errMsg")
+                emit(StreamingChunk.Error(errMsg ?: "Empty stream"))
+                return@flow
+            }
+            val backoffMs = 3000L * (1 shl (attempt - 1))
+            Log.w(TAG, "$name retrying stream after ${backoffMs}ms: $errMsg")
+            delay(backoffMs)
         }
     }
+
+    override suspend fun healthCheck(): Boolean = true
+
+    private fun isRetriableMessage(msg: String): Boolean =
+        msg.startsWith("HTTP 429") ||
+            msg.startsWith("HTTP 500") ||
+            msg.startsWith("HTTP 502") ||
+            msg.startsWith("HTTP 503") ||
+            msg.startsWith("HTTP 504") ||
+            msg.startsWith("IO error")
 
     companion object {
         private const val TAG = "SongGenerationBackend"

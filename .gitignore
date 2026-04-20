@@ -9,3 +9,4 @@
 .cxx
 *.keystore
 app/libs/*.aar
+scripts/test_two_step_pipeline.py
