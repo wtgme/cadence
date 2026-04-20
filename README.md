@@ -49,7 +49,7 @@ These effects depend critically on *fit* between musical properties and real-tim
                          ▼
 ┌─────────────────────────────────────────────────────────────┐
 │               STEP 1 — Context Translation                  │
-│  LLM (OpenRouter / Nemotron-3-Super 120B)                   │
+│  LLM — any OpenAI-compatible chat endpoint                  │
 │  Biometric context → Mental state estimation                │
 │  (arousal · valence · stress · energy · focus)              │
 │  → Song parameters (genre tags · BPM · mood · intensity)    │
@@ -58,7 +58,7 @@ These effects depend critically on *fit* between musical properties and real-tim
                          ▼
 ┌─────────────────────────────────────────────────────────────┐
 │               STEP 2 — Music Generation                     │
-│  SongGeneration v2-large (self-hosted)                      │
+│  Text-to-music model (MiniMax, SongGeneration, etc.)        │
 │  Song parameters → Instrumental MP3                         │
 └────────────────────────┬────────────────────────────────────┘
                          │
