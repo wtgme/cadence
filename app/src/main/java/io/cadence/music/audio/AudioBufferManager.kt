@@ -87,6 +87,9 @@ class AudioBufferManager @Inject constructor(
     private val activeJobs = mutableListOf<Job>()
     private val generationSemaphore = Semaphore(MAX_CONCURRENT_GENERATIONS)
 
+    /** Tracks the number of files currently sitting in [queue] (incremented on enqueue, decremented on takeNext). */
+    private val queuedCount = java.util.concurrent.atomic.AtomicInteger(0)
+
     private val _chunksReady = MutableStateFlow(0)
     val chunksReady: StateFlow<Int> = _chunksReady
 
@@ -240,6 +243,7 @@ class AudioBufferManager @Inject constructor(
                     Log.d(TAG, "Worker: queuing chunk ${chunk.index} (${chunk.file.name})")
                     queue.send(chunk.file)
                     _chunksReady.update { it + 1 }
+                    queuedCount.incrementAndGet()
                 }
                 is StreamingChunk.Error -> {
                     Log.e(TAG, "Worker: stream error — ${chunk.message}")
@@ -277,8 +281,12 @@ class AudioBufferManager @Inject constructor(
                 Log.d(TAG, "Cleaned old file: ${file.name}")
             }
         }
+        queuedCount.set(0)
         _hasPrevious.value = false
     }
+
+    /** True if the buffer channel still has at least one downloaded file ready for playback. */
+    val hasBufferedAudio: Boolean get() = queuedCount.get() > 0
 
     /**
      * Start a new playback session. Clears both the cached [MentalState] and [SongParams]
@@ -289,13 +297,19 @@ class AudioBufferManager @Inject constructor(
      * within ±15 bpm, saved <10 min ago), reuse them to skip Step 1 entirely on song #1.
      */
     suspend fun prime(sensorState: SensorState, scene: Scene?) {
-        cleanAudioCache()
+        val resumingBuffer = hasBufferedAudio
+        if (resumingBuffer) {
+            Log.d(TAG, "prime: resuming with ${queuedCount.get()} buffered chunks — skipping cache wipe")
+        } else {
+            cleanAudioCache()
+            _chunksReady.value = 0
+            _currentMetricsContext.value = ""
+            _currentSongParams.value = null
+            _currentMentalState.value = null
+        }
         sessionMentalState = null
         sessionParams = null
         previousSongParams = null
-        _currentMetricsContext.value = ""
-        _currentSongParams.value = null
-        _currentMentalState.value = null
 
         val cached = lastSessionParams.load()
         if (cached != null && lastSessionParams.isFreshFor(cached, scene, sensorState.heartRate)) {
@@ -335,6 +349,8 @@ class AudioBufferManager @Inject constructor(
             if (polled.isFailure) break
             polled.getOrNull()?.delete()
         }
+        queuedCount.set(0)
+        _chunksReady.value = 0
         _lastError.value = null
         enqueueGeneration(sensorState, scene)
     }
@@ -342,12 +358,11 @@ class AudioBufferManager @Inject constructor(
     private fun enqueueGeneration(sensorState: SensorState, scene: Scene?) {
         currentSensorState = sensorState
         currentScene = scene
-        _chunksReady.value = 0
         requestChannel.trySend(Unit)
     }
 
     suspend fun takeNext(): File? = try {
-        queue.receive()
+        queue.receive().also { queuedCount.decrementAndGet() }
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
@@ -382,12 +397,13 @@ class AudioBufferManager @Inject constructor(
             if (polled.isFailure) break
             polled.getOrNull()?.delete()
         }
+        queuedCount.set(0)
         _chunksReady.value = 0
         _lastError.value = null
         sessionMentalState = null
         sessionParams = null
         previousSongParams = null
-        Log.d(TAG, "Generation cancelled (epoch=$generationEpoch)")
+        Log.d(TAG, "Generation cancelled (epoch=$generationEpoch), buffer cleared")
     }
 
     fun updateSensorState(state: SensorState) {

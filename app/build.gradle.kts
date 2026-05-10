@@ -10,6 +10,19 @@ plugins {
 
 val localPropsFile = rootProject.file("local.properties")
 val localProps = Properties().also { if (localPropsFile.exists()) it.load(localPropsFile.inputStream()) }
+val releaseKeystorePath = localProps.getProperty("release.keystore.path")
+val releaseKeystorePassword = localProps.getProperty("release.keystore.password")
+val releaseKeyAlias = localProps.getProperty("release.key.alias")
+val releaseKeyPassword = localProps.getProperty("release.key.password")
+val releaseSigningProps = listOf(
+    releaseKeystorePath,
+    releaseKeystorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword,
+)
+val hasAllReleaseSigningProps = releaseSigningProps.all { !it.isNullOrBlank() }
+val releaseKeystoreFile = releaseKeystorePath?.let { rootProject.file(it) }
+val releaseSigningEnabled = hasAllReleaseSigningProps && releaseKeystoreFile?.isFile == true
 
 android {
     namespace = "io.cadence.music"
@@ -19,8 +32,8 @@ android {
         applicationId = "io.cadence.music"
         minSdk = 30
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.2.0"
+        versionCode = 5
+        versionName = "0.5.0"
 
         buildConfigField("String", "SIGNAL2STYLE_BASE_URL", "\"${localProps.getProperty("signal2style.base.url", "https://openrouter.ai/api/v1")}\"")
         buildConfigField("String", "SIGNAL2STYLE_API_KEY", "\"${localProps.getProperty("signal2style.api.key", "")}\"")
@@ -30,10 +43,27 @@ android {
         buildConfigField("String", "SONGGEN_MODEL", "\"${localProps.getProperty("songgen.model", "SongGeneration-v2-large")}\"")
     }
 
+    signingConfigs {
+        if (releaseSigningEnabled) {
+            create("release") {
+                storeFile = releaseKeystoreFile
+                storePassword = releaseKeystorePassword!!
+                keyAlias = releaseKeyAlias!!
+                keyPassword = releaseKeyPassword!!
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (releaseSigningEnabled) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+            ndk {
+                debugSymbolLevel = "FULL"
+            }
         }
         debug {
             applicationIdSuffix = ".debug"

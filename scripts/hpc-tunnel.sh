@@ -9,9 +9,9 @@
 # The working directory on the remote (/users/k1810895/data/musicgen) is stable.
 
 PIDFILE="$HOME/.hpc-tunnel.pid"
-LOCAL_PORT=8888               # localhost:8888 → <REMOTE_HOST>:40839 (SongGeneration API)
-REMOTE_HOST="erc-hpc-comp222" # ← update this if the node changes
-REMOTE_PORT=40839
+LOCAL_PORT=8888               # localhost:8888 → <REMOTE_HOST>:<REMOTE_PORT> (SongGeneration API)
+REMOTE_HOST="erc-hpc-comp232" # ← update this if the node changes
+REMOTE_PORT=45385
 LOGIN_NODE="k1810895@hpc.create.kcl.ac.uk"
 
 start() {

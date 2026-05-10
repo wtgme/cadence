@@ -80,6 +80,9 @@ class MusicPlayerService : MediaSessionService() {
                 }
                 enqueuedFiles.removeFirstOrNull()?.let { played ->
                     playedFiles.add(played)
+                    while (playedFiles.size > MAX_HISTORY) {
+                        playedFiles.removeAt(0).delete()
+                    }
                     bufferManager.updateHasPrevious(true)
                     Log.d(TAG, "Moved to history: ${played.name} (history=${playedFiles.size})")
                 }
@@ -88,6 +91,13 @@ class MusicPlayerService : MediaSessionService() {
                 // The buffer worker self-triggers new song generation after each
                 // stream completes — no explicit onChunkStarted() needed here.
                 feedNextChunk()
+            }
+
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_ENDED && isPlaying) {
+                    Log.d(TAG, "STATE_ENDED while playing — fetching next chunk")
+                    feedNextChunk()
+                }
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
@@ -176,7 +186,7 @@ class MusicPlayerService : MediaSessionService() {
             return
         }
 
-        val previousFile = playedFiles.removeLast()
+        val previousFile = playedFiles.removeAt(playedFiles.lastIndex)
         bufferManager.updateHasPrevious(playedFiles.isNotEmpty())
 
         // Save all currently enqueued files
@@ -226,10 +236,8 @@ class MusicPlayerService : MediaSessionService() {
     private fun startFeedLoop() {
         feedJob?.cancel()
         feedJob = scope.launch {
-            // Welcome bridge: if res/raw/welcome_pad is present, play it on loop at low volume
-            // while the first real chunk is generating. Gives the user immediate audio feedback
-            // rather than silent dead-air during the ~20–40s cold start.
-            val welcomeStarted = maybeStartWelcomePad()
+            // Skip the welcome pad when pre-buffered audio is already available — go straight to music.
+            val welcomeStarted = if (!bufferManager.hasBufferedAudio) maybeStartWelcomePad() else false
 
             val first = bufferManager.takeNext() ?: run {
                 Log.w(TAG, "Buffer returned null — no audio to play")
@@ -324,5 +332,6 @@ class MusicPlayerService : MediaSessionService() {
         private const val TAG = "MusicPlayerService"
         private const val WELCOME_PAD_VOLUME = 0.30f
         private const val WELCOME_FADE_MS = 600L
+        private const val MAX_HISTORY = 5
     }
 }

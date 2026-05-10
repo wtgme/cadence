@@ -181,7 +181,7 @@ class SongGenerationBackend @Inject constructor(
                 .post(body.toRequestBody(JSON))
                 .build()
 
-            var bytesWritten = 0L
+            var realBytesWritten = 0L
             var file: File? = null
             val errMsg: String? = try {
                 client.newCall(request).execute().use { response ->
@@ -193,6 +193,10 @@ class SongGenerationBackend @Inject constructor(
                         file = out
                         val t0 = System.currentTimeMillis()
                         var firstByteMs = -1L
+                        // Server sends 0x00 heartbeat bytes before chunk 0 to keep
+                        // Cloudflare from 524'ing. Skip leading nulls until we see
+                        // the start of MP3 data (ID3 tag or MPEG sync byte 0xFF).
+                        var sawRealByte = false
                         response.body?.byteStream()?.use { input ->
                             FileOutputStream(out).use { sink ->
                                 val buf = ByteArray(16 * 1024)
@@ -201,14 +205,22 @@ class SongGenerationBackend @Inject constructor(
                                     if (n == -1) break
                                     if (firstByteMs < 0) {
                                         firstByteMs = System.currentTimeMillis() - t0
-                                        Log.d(TAG, "$name: first bytes after ${firstByteMs}ms")
+                                        Log.d(TAG, "$name: first bytes (heartbeat or audio) after ${firstByteMs}ms")
                                     }
-                                    sink.write(buf, 0, n)
-                                    bytesWritten += n
+                                    var start = 0
+                                    if (!sawRealByte) {
+                                        start = findMp3Start(buf, n)
+                                        if (start < 0) continue
+                                        sawRealByte = true
+                                        val firstRealByteMs = System.currentTimeMillis() - t0
+                                        Log.d(TAG, "$name: first real audio byte after ${firstRealByteMs}ms")
+                                    }
+                                    sink.write(buf, start, n - start)
+                                    realBytesWritten += (n - start)
                                 }
                             }
                         }
-                        Log.d(TAG, "$name ← ${bytesWritten / 1024}KB streamed in ${System.currentTimeMillis() - t0}ms")
+                        Log.d(TAG, "$name ← ${realBytesWritten / 1024}KB streamed in ${System.currentTimeMillis() - t0}ms")
                         null
                     }
                 }
@@ -218,14 +230,14 @@ class SongGenerationBackend @Inject constructor(
                 "Error: ${e.message}"
             }
 
-            if (errMsg == null && bytesWritten > 0 && file != null) {
+            if (errMsg == null && realBytesWritten > 0 && file != null) {
                 emit(StreamingChunk.Audio(file!!, 0, params))
                 emit(StreamingChunk.Complete)
                 return@flow
             }
 
             file?.takeIf { it.exists() }?.delete()
-            val retriable = errMsg != null && isRetriableMessage(errMsg) && bytesWritten == 0L
+            val retriable = errMsg != null && isRetriableMessage(errMsg)
             if (!retriable || attempt == MAX_ATTEMPTS) {
                 Log.w(TAG, "$name stream failed (attempt $attempt): $errMsg")
                 emit(StreamingChunk.Error(errMsg ?: "Empty stream"))
@@ -246,6 +258,21 @@ class SongGenerationBackend @Inject constructor(
             msg.startsWith("HTTP 503") ||
             msg.startsWith("HTTP 504") ||
             msg.startsWith("IO error")
+
+    private fun findMp3Start(buffer: ByteArray, limit: Int): Int {
+        for (i in 0 until limit) {
+            val byte = buffer[i].toInt() and 0xFF
+            if (byte == 0xFF) return i
+            if (i <= limit - 3 &&
+                buffer[i] == 'I'.code.toByte() &&
+                buffer[i + 1] == 'D'.code.toByte() &&
+                buffer[i + 2] == '3'.code.toByte()
+            ) {
+                return i
+            }
+        }
+        return -1
+    }
 
     companion object {
         private const val TAG = "SongGenerationBackend"
