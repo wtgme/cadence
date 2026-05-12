@@ -17,6 +17,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -145,8 +146,11 @@ class MusicPlayerService : MediaSessionService() {
 
     override fun onDestroy() {
         isPlaying = false
-        feedJob?.cancel()
-        positionJob?.cancel()
+        // Cancel the scope (not just feedJob/positionJob) so feedNextChunk coroutines
+        // launched from player listeners — which may be suspended in bufferManager.takeNext()
+        // — abort before the player is released. Otherwise a chunk arriving after release
+        // resumes them into enqueueFile(), which calls player methods on a dead handler.
+        scope.cancel()
         bufferManager.updateProgress(0L, 0L)
         playedFiles.forEach { it.delete() }
         playedFiles.clear()
