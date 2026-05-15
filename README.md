@@ -20,11 +20,14 @@
 
 <table>
   <tr>
-    <td align="center"><img src="screenshots/screen_player.png" width="160" height="347"/><br/><sub><b>Player</b><br/>Live scene & heart rate</sub></td>
-    <td align="center"><img src="screenshots/screen_synthesising.png" width="160" height="347"/><br/><sub><b>Synthesising</b><br/>Generation in progress</sub></td>
-    <td align="center"><img src="screenshots/screen_adjust.png" width="160" height="347"/><br/><sub><b>Adjust Music</b><br/>Genre, energy, free-text prompt</sub></td>
-    <td align="center"><img src="screenshots/screen_activity_picker.png" width="160" height="347"/><br/><sub><b>Activity Picker</b><br/>Manual context override</sub></td>
-    <td align="center"><img src="screenshots/screen_settings.png" width="160" height="347"/><br/><sub><b>API Settings</b><br/>Swap in any compatible backend</sub></td>
+    <td align="center"><img src="screenshots/01%20_%20Welcome.png" width="160"/><br/><sub><b>Welcome</b><br/>Onboarding entry point</sub></td>
+    <td align="center"><img src="screenshots/02%20_%20Create%20account.png" width="160"/><br/><sub><b>Create Account</b><br/>Sign up to get started</sub></td>
+    <td align="center"><img src="screenshots/03%20_%20Pair%20device.png" width="160"/><br/><sub><b>Pair Device</b><br/>Connect your wearable</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="screenshots/04%20_%20Permissions.png" width="160"/><br/><sub><b>Permissions</b><br/>Health Connect & location</sub></td>
+    <td align="center"><img src="screenshots/05%20_%20Seed%20taste.png" width="160"/><br/><sub><b>Seed Taste</b><br/>Personalise your profile</sub></td>
+    <td align="center"><img src="screenshots/06%20_%20Ready.png" width="160"/><br/><sub><b>Ready</b><br/>Start generating music</sub></td>
   </tr>
 </table>
 
