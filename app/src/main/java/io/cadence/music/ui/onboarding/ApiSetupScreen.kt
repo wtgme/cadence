@@ -1,4 +1,4 @@
-package io.cadence.music.ui.settings
+package io.cadence.music.ui.onboarding
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -13,14 +13,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Snackbar
@@ -37,26 +35,32 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import io.cadence.music.ui.onboarding.CadenceButtonTone
-import io.cadence.music.ui.onboarding.PrimaryCadenceButton
+import io.cadence.music.ui.settings.ApiSettingsDraft
+import io.cadence.music.ui.settings.ApiSettingsForm
+import io.cadence.music.ui.settings.SettingsViewModel
 import io.cadence.music.ui.theme.CadenceBg
-import io.cadence.music.ui.theme.CadenceBlue
-import io.cadence.music.ui.theme.CadenceBlueDim
-import io.cadence.music.ui.theme.CadenceBlueDimHi
 import io.cadence.music.ui.theme.CadenceOrange
+import io.cadence.music.ui.theme.CadenceOrangeDim
+import io.cadence.music.ui.theme.CadenceOrangeDimHi
 import io.cadence.music.ui.theme.CadenceSurface
 import io.cadence.music.ui.theme.CadenceText
 import io.cadence.music.ui.theme.CadenceTextMute
-import io.cadence.music.ui.theme.FontJetBrainsMono
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Onboarding API setup. Shows defaults pre-filled, warns the user that the
+ * defaults are the developer's personal endpoints, and lets them substitute
+ * their own keys. Reused in two contexts (mid-onboarding and existing-user
+ * one-shot after update) via flow-specific [onSaveAndContinue] / [onUseDefaults]
+ * callbacks.
+ */
 @Composable
-fun SettingsScreen(
-    onBack: () -> Unit,
+fun ApiSetupScreen(
+    onSaveAndContinue: () -> Unit,
+    onUseDefaults: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val settings by viewModel.settings.collectAsState()
@@ -77,67 +81,61 @@ fun SettingsScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(CadenceBg),
+            .background(CadenceBg)
+            .systemBarsPadding(),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .statusBarsPadding(),
-        ) {
-            // App bar — matches PlayerScreen's top bar style
-            Row(
-                modifier              = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 12.dp),
-                verticalAlignment     = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
-                        .clickable(onClick = onBack),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector        = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
-                        tint               = CadenceText,
-                        modifier           = Modifier.size(16.dp),
-                    )
-                }
-                Text(
-                    text  = "API SETTINGS",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = CadenceOrange,
-                )
-                Spacer(Modifier.size(36.dp))
-            }
+        Column(modifier = Modifier.fillMaxSize()) {
+            OnboardingTopBar(step = 2)
 
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 24.dp, vertical = 14.dp),
+                    .padding(horizontal = 24.dp),
             ) {
-                Row(verticalAlignment = Alignment.Top) {
-                    Text(
-                        text  = "Override defaults from ",
-                        color = CadenceTextMute,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Text(
-                        text  = "local.properties",
-                        color = CadenceText,
-                        style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontJetBrainsMono),
-                    )
-                }
                 Text(
-                    text  = "Changes take effect on the next generation.",
+                    text  = "API SETUP",
+                    color = CadenceOrange,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text  = "Bring your own keys",
+                    color = CadenceText,
+                    style = MaterialTheme.typography.displaySmall,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text  = "Cadence ships with shared default endpoints so you can try it immediately — but you'll get faster, more reliable generation with your own.",
                     color = CadenceTextMute,
                     style = MaterialTheme.typography.bodyMedium,
                 )
+
+                Spacer(Modifier.height(16.dp))
+
+                // Warning banner
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(CadenceOrangeDim)
+                        .border(1.dp, CadenceOrangeDimHi, RoundedCornerShape(14.dp))
+                        .padding(14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment     = Alignment.Top,
+                ) {
+                    Icon(
+                        imageVector        = Icons.Default.Warning,
+                        contentDescription = null,
+                        tint               = CadenceOrange,
+                        modifier           = Modifier.size(18.dp).padding(top = 1.dp),
+                    )
+                    Text(
+                        text  = "The default endpoints use the developer's personal account. They can be slow or rate-limited under load. We recommend using your own keys.",
+                        color = CadenceText,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
 
                 Spacer(Modifier.height(18.dp))
 
@@ -147,36 +145,10 @@ fun SettingsScreen(
                     onChange = { draft = it },
                 )
 
-                Spacer(Modifier.height(8.dp))
-
-                // Info banner
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(CadenceBlueDim)
-                        .border(1.dp, CadenceBlueDimHi, RoundedCornerShape(14.dp))
-                        .padding(14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.Top,
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Info,
-                        contentDescription = null,
-                        tint = CadenceBlue,
-                        modifier = Modifier.size(18.dp).padding(top = 1.dp),
-                    )
-                    Text(
-                        text  = "Keys are stored in the device keystore and never sync to Cadence servers.",
-                        color = CadenceText,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
-
                 Spacer(Modifier.height(18.dp))
 
                 PrimaryCadenceButton(
-                    text = "Save",
+                    text = "Save & continue",
                     onClick = {
                         viewModel.save(
                             signal2StyleBaseUrl = draft.signal2StyleBaseUrl,
@@ -186,10 +158,10 @@ fun SettingsScreen(
                             songGenApiKey       = draft.songGenApiKey,
                             songGenModel        = draft.songGenModel,
                         ) { result ->
-                            toast(when (result) {
-                                SettingsViewModel.Result.Saved      -> "Saved"
-                                is SettingsViewModel.Result.Invalid -> result.message
-                            })
+                            when (result) {
+                                SettingsViewModel.Result.Saved      -> onSaveAndContinue()
+                                is SettingsViewModel.Result.Invalid -> toast(result.message)
+                            }
                         }
                     },
                     tone = CadenceButtonTone.Blue,
@@ -201,17 +173,26 @@ fun SettingsScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
-                        .clickable { viewModel.resetAll { toast("All settings reset to defaults") } }
+                        .clickable(onClick = onUseDefaults)
                         .padding(vertical = 12.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text  = "Reset all to defaults",
-                        color = CadenceOrange,
-                        style = MaterialTheme.typography.titleMedium,
+                        text       = "Use defaults for now",
+                        color      = CadenceOrange,
+                        style      = MaterialTheme.typography.titleMedium,
+                        textAlign  = TextAlign.Center,
                     )
                 }
 
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text       = "You can change these anytime from Settings (top-right of the player).",
+                    color      = CadenceTextMute,
+                    style      = MaterialTheme.typography.bodySmall,
+                    textAlign  = TextAlign.Center,
+                    modifier   = Modifier.fillMaxWidth(),
+                )
                 Spacer(Modifier.height(24.dp))
             }
         }

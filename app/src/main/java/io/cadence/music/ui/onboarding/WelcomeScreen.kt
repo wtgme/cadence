@@ -3,7 +3,6 @@ package io.cadence.music.ui.onboarding
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,7 +43,6 @@ import io.cadence.music.ui.theme.CadenceTextMute
 @Composable
 fun WelcomeScreen(
     onGetStarted: () -> Unit,
-    onSignIn: () -> Unit = onGetStarted,
 ) {
     Box(
         modifier = Modifier
@@ -102,32 +100,11 @@ fun WelcomeScreen(
             }
 
             // CTA cluster
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                PrimaryCadenceButton(
-                    text = "Get started",
-                    onClick = onGetStarted,
-                    tone = CadenceButtonTone.Blue,
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(onClick = onSignIn)
-                        .padding(vertical = 6.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = buildAnnotatedString {
-                            append("Already a listener? ")
-                            withStyle(SpanStyle(color = CadenceBlue, fontWeight = FontWeight.SemiBold)) {
-                                append("Sign in")
-                            }
-                        },
-                        color = CadenceTextMute,
-                        style = MaterialTheme.typography.bodyMedium,
-                        textAlign = TextAlign.Center,
-                    )
-                }
-            }
+            PrimaryCadenceButton(
+                text = "Get started",
+                onClick = onGetStarted,
+                tone = CadenceButtonTone.Blue,
+            )
         }
     }
 }

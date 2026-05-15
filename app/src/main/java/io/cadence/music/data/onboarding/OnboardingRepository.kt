@@ -11,7 +11,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 private val Context.onboardingDataStore by preferencesDataStore(name = "onboarding")
-private val KEY_COMPLETED = booleanPreferencesKey("completed")
+private val KEY_COMPLETED       = booleanPreferencesKey("completed")
+private val KEY_API_SETUP_SEEN  = booleanPreferencesKey("api_setup_seen")
 
 @Singleton
 class OnboardingRepository @Inject constructor(
@@ -20,7 +21,14 @@ class OnboardingRepository @Inject constructor(
     val completed: Flow<Boolean> = context.onboardingDataStore.data
         .map { it[KEY_COMPLETED] ?: false }
 
+    val apiSetupSeen: Flow<Boolean> = context.onboardingDataStore.data
+        .map { it[KEY_API_SETUP_SEEN] ?: false }
+
     suspend fun markCompleted() {
         context.onboardingDataStore.edit { it[KEY_COMPLETED] = true }
+    }
+
+    suspend fun markApiSetupSeen() {
+        context.onboardingDataStore.edit { it[KEY_API_SETUP_SEEN] = true }
     }
 }
