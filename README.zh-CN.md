@@ -12,6 +12,8 @@
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
 [![Google Play](https://img.shields.io/badge/Google%20Play-审核中-414141?logo=googleplay&logoColor=white)](https://play.google.com/apps/internaltest/4701327609853151006)
 
+<img src="screenshots/cadence-banner.png" alt="Cadence 概览：同质原理、两步式 AI 流水线、情景感知输出" width="100%"/>
+
 **Cadence** 持续读取你的生理状态，并基于 *同质原理*（iso-principle）实时生成个性化的器乐音乐——先匹配你当前的状态，再逐步将其引导至期望的情绪目标。
 
 </div>
