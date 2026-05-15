@@ -29,6 +29,14 @@
     <td align="center"><img src="screenshots/05%20_%20Seed%20taste.png" width="160"/><br/><sub><b>Seed Taste</b><br/>Personalise your profile</sub></td>
     <td align="center"><img src="screenshots/06%20_%20Ready.png" width="160"/><br/><sub><b>Ready</b><br/>Start generating music</sub></td>
   </tr>
+  <tr>
+    <td align="center" colspan="3">
+      <img src="screenshots/09%20_%20Adjust%20music.png" width="160"/>
+      &nbsp;&nbsp;
+      <img src="screenshots/12%20_%20AI%20reasoning.png" width="160"/>
+      <br/><sub><b>Adjust Music</b> — Genre, energy, free-text prompt &nbsp;·&nbsp; <b>AI Reasoning</b> — Full inference chain</sub>
+    </td>
+  </tr>
 </table>
 
 ---
