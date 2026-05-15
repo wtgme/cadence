@@ -211,7 +211,7 @@ class AudioBufferManager @Inject constructor(
             }
         }
         _currentSongParams.value = params
-        _currentMentalState.value = musicRepository.translatedMentalState.value
+        _currentMentalState.value = sessionMentalState
         Log.d(TAG, "Worker: params ready — descriptions=${params.descriptions} type=${params.auto_prompt_audio_type} epoch=$myEpoch")
 
         if (myEpoch != generationEpoch) {
