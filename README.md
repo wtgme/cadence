@@ -16,6 +16,14 @@
 
 **Cadence** continuously reads your physiological state and generates personalised instrumental music in real time — grounded in the *iso-principle*: matching music to your current state before gradually steering it toward a desired emotional target.
 
+---
+
+### Join the Closed Test
+
+**No smartwatch required — your phone is enough.**
+
+[Join the Google Group (without this step the other links don't work)](https://groups.google.com/g/cadence-ai-music) · [Become a tester](https://play.google.com/apps/testing/io.cadence.music) · [Download the app](https://play.google.com/store/apps/details?id=io.cadence.music)
+
 </div>
 
 ---

@@ -16,6 +16,14 @@
 
 **Cadence** 持续读取你的生理状态，并基于 *同质原理*（iso-principle）实时生成个性化的器乐音乐——先匹配你当前的状态，再逐步将其引导至期望的情绪目标。
 
+---
+
+### 加入封闭测试
+
+**无需智能手表——仅需手机即可参与。**
+
+[加入 Google 用户组（未完成此步骤其他链接将无法使用）](https://groups.google.com/g/cadence-ai-music) · [成为测试者](https://play.google.com/apps/testing/io.cadence.music) · [下载应用](https://play.google.com/store/apps/details?id=io.cadence.music)
+
 </div>
 
 ---
