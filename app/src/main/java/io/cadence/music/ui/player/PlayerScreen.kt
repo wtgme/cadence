@@ -1092,31 +1092,43 @@ private fun BottomSheetContent(
                 color    = Color.White.copy(alpha = 0.07f),
                 modifier = Modifier.padding(vertical = 4.dp),
             )
-            var tracksExpanded by remember { mutableStateOf(false) }
-            val visibleTracks  = if (tracksExpanded) songHistory else songHistory.take(5)
+            var sectionExpanded by remember { mutableStateOf(false) }
+            var showAll         by remember { mutableStateOf(false) }
+            val visibleTracks   = if (showAll) songHistory else songHistory.take(5)
 
             Row(
-                modifier              = Modifier.fillMaxWidth(),
+                modifier              = Modifier
+                    .fillMaxWidth()
+                    .clickable { sectionExpanded = !sectionExpanded },
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment     = Alignment.CenterVertically,
             ) {
                 Text(
-                    text  = "GENERATED TRACKS",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = TextTertiary,
+                    text  = "GENERATED TRACKS · ${songHistory.size}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = TextSecondary,
                 )
-                if (songHistory.size > 5) {
-                    Text(
-                        text     = if (tracksExpanded) "show less" else "+${songHistory.size - 5} more",
-                        style    = MaterialTheme.typography.labelSmall,
-                        color    = GlowDefault.copy(alpha = 0.6f),
-                        modifier = Modifier.clickable { tracksExpanded = !tracksExpanded },
-                    )
-                }
+                Text(
+                    text  = if (sectionExpanded) "collapse" else "expand",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = GlowDefault.copy(alpha = 0.6f),
+                )
             }
 
-            visibleTracks.forEach { song ->
-                GeneratedTrackCard(song = song, modifier = Modifier.fillMaxWidth())
+            if (sectionExpanded) {
+                visibleTracks.forEach { song ->
+                    GeneratedTrackCard(song = song, modifier = Modifier.fillMaxWidth())
+                }
+                if (songHistory.size > 5) {
+                    Text(
+                        text     = if (showAll) "show less" else "+${songHistory.size - 5} more",
+                        style    = MaterialTheme.typography.labelSmall,
+                        color    = GlowDefault.copy(alpha = 0.6f),
+                        modifier = Modifier
+                            .clickable { showAll = !showAll }
+                            .padding(top = 4.dp),
+                    )
+                }
             }
         }
 
