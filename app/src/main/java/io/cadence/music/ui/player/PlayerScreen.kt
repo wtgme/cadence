@@ -1475,13 +1475,6 @@ private fun AIReasoningPanel(
 ) {
     var expanded by remember { mutableStateOf(false) }
 
-    Text(
-        text     = "AI REASONING CHAIN",
-        style    = MaterialTheme.typography.labelSmall,
-        color    = TextTertiary,
-        modifier = Modifier.padding(bottom = 8.dp),
-    )
-
     GlassCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
@@ -1489,23 +1482,33 @@ private fun AIReasoningPanel(
                 .clickable { expanded = !expanded }
                 .padding(16.dp),
         ) {
+            // Panel title — stays inside the card so it never scrolls off
+            // independently of the box content.
             Row(
                 modifier              = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment     = Alignment.CenterVertically,
             ) {
                 Text(
-                    text       = "INPUT: BIOMETRIC CONTEXT",
-                    style      = MaterialTheme.typography.labelSmall,
-                    color      = GlowDefault,
-                    fontWeight = FontWeight.Bold,
+                    text  = "AI REASONING CHAIN",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = TextSecondary,
                 )
                 Text(
                     text  = if (expanded) "collapse" else "expand",
                     style = MaterialTheme.typography.labelSmall,
-                    color = GlowDefault.copy(alpha = 0.5f),
+                    color = GlowDefault.copy(alpha = 0.6f),
                 )
             }
+
+            Spacer(Modifier.height(12.dp))
+
+            Text(
+                text       = "INPUT: BIOMETRIC CONTEXT",
+                style      = MaterialTheme.typography.labelSmall,
+                color      = GlowDefault,
+                fontWeight = FontWeight.Bold,
+            )
             Spacer(Modifier.height(4.dp))
             Text(
                 text     = metricsContext,
