@@ -67,7 +67,7 @@ class SceneDetectorTest {
 
     @Test
     fun `stationary with elevated HR returns WORKOUT`() {
-        assertEquals(Scene.WORKOUT, detector.detect(stateWith(speedKmh = 0f, heartRate = 101)))
+        assertEquals(Scene.WORKOUT, detector.detect(stateWith(speedKmh = 0f, heartRate = 121)))
         assertEquals(Scene.WORKOUT, detector.detect(stateWith(speedKmh = 0f, heartRate = 130)))
     }
 

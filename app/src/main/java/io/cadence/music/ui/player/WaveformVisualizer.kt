@@ -27,12 +27,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import io.cadence.music.ui.theme.CadenceBlue
+import io.cadence.music.ui.theme.CadenceOrange
 import io.cadence.music.ui.theme.TextSecondary
 import kotlinx.coroutines.delay
 import kotlin.math.PI
@@ -205,43 +208,60 @@ private fun DrawScope.drawCircularWaveform(
     isPlaying: Boolean,
     glowColor: Color,
 ) {
-    val barCount = 48
     val cx = size.width / 2f
     val cy = size.height / 2f
-    val radius = size.minDimension / 2f * 0.52f
-    val maxBarLen = size.minDimension / 2f * 0.35f
-    val minBarLen = size.minDimension / 2f * 0.04f
-    val barWidth = 3.5f
+    val outerR = size.minDimension / 2f
+    val center = Offset(cx, cy)
 
-    for (i in 0 until barCount) {
-        val angle = (2 * PI * i / barCount).toFloat()
-        val waveVal = if (isPlaying) {
-            val raw = sin(phase + i * (2 * PI / barCount).toFloat() * 2f).toFloat()
-            (raw + 1f) / 2f  // 0..1
-        } else {
-            0.12f
-        }
-        val barLen = minBarLen + waveVal * (maxBarLen - minBarLen)
-        val alpha = if (isPlaying) 0.55f + waveVal * 0.45f else 0.25f
+    // Outer hairline circle
+    drawCircle(
+        color = Color.White.copy(alpha = 0.06f),
+        radius = outerR * 0.84f,
+        center = center,
+        style = Stroke(width = 1.dp.toPx()),
+    )
 
-        val innerX = cx + cos(angle) * radius
-        val innerY = cy + sin(angle) * radius
-        val outerX = cx + cos(angle) * (radius + barLen)
-        val outerY = cy + sin(angle) * (radius + barLen)
+    // Gradient progress arc (blue → orange) - rotates with phase when playing
+    val arcRadius = outerR * 0.72f
+    val arcInset  = outerR - arcRadius
+    val arcStyle  = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
+    val gradient  = Brush.linearGradient(
+        colors = listOf(CadenceBlue, CadenceOrange),
+        start  = Offset(0f, 0f),
+        end    = Offset(size.width, size.height),
+    )
+    val rotationDeg = if (isPlaying) Math.toDegrees(phase.toDouble()).toFloat() * 0.5f else 0f
+    drawArc(
+        brush      = gradient,
+        startAngle = -100f + rotationDeg,
+        sweepAngle = 280f,
+        useCenter  = false,
+        topLeft    = Offset(arcInset, arcInset),
+        size       = Size(arcRadius * 2, arcRadius * 2),
+        style      = arcStyle,
+    )
 
+    // Tick marks (48), inner ring — first 32 active
+    val tickCount = 48
+    val activeTicks = if (isPlaying) {
+        val sweep = ((sin(phase) + 1f) / 2f) * 8f
+        (28 + sweep.toInt()).coerceIn(20, 38)
+    } else 16
+    val tickInnerR = outerR * 0.50f
+    val tickOuterR = outerR * 0.56f
+
+    for (i in 0 until tickCount) {
+        val ang = (2 * PI * i / tickCount).toFloat() - (PI / 2).toFloat()
+        val active = i < activeTicks
+        val color  = if (active) glowColor.copy(alpha = 0.4f + (1f - i / activeTicks.toFloat()) * 0.6f)
+                     else Color.White.copy(alpha = 0.12f)
+        val width  = if (active) 2f.dp.toPx() else 1.2f.dp.toPx()
         drawLine(
-            color = glowColor.copy(alpha = alpha),
-            start = Offset(innerX, innerY),
-            end = Offset(outerX, outerY),
-            strokeWidth = barWidth,
+            color = color,
+            start = Offset(cx + cos(ang) * tickInnerR, cy + sin(ang) * tickInnerR),
+            end   = Offset(cx + cos(ang) * tickOuterR, cy + sin(ang) * tickOuterR),
+            strokeWidth = width,
             cap = StrokeCap.Round,
         )
     }
-
-    // Centre ring
-    drawCircle(
-        color = glowColor.copy(alpha = if (isPlaying) 0.12f else 0.06f),
-        radius = radius,
-        center = Offset(cx, cy),
-    )
 }

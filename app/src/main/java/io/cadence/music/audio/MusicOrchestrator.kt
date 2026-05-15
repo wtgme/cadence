@@ -222,6 +222,10 @@ class MusicOrchestrator @Inject constructor(
         sceneStateMachine.forceScene(scene)
     }
 
+    fun clearSceneOverride() {
+        sceneStateMachine.resetOverride()
+    }
+
     suspend fun refreshBiometrics() {
         _hasHealthPermissions.value = sensorStateCollector.hasHeartRatePermission()
         Log.d(TAG, "Refresh: HC heart rate permission granted = ${_hasHealthPermissions.value}")

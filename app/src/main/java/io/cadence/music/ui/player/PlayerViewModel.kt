@@ -105,6 +105,8 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch { orchestrator.forceScene(scene) }
     }
 
+    fun clearSceneOverride() = orchestrator.clearSceneOverride()
+
     fun retryGeneration() = orchestrator.retryGeneration()
 
     /** Explicit thumbs-up: records as a full positive listen signal. */

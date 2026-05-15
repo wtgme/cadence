@@ -47,7 +47,7 @@ class SceneDetector @Inject constructor() {
         const val CYCLING_SPEED_THRESHOLD   = 4f    // km/h  (above brisk walk)
         const val WALKING_SPEED_THRESHOLD   = 2f    // km/h
         const val RUNNING_HR_THRESHOLD      = 135   // bpm
-        const val WORKOUT_HR_THRESHOLD      = 100   // bpm  (stationary elevated HR → gym)
+        const val WORKOUT_HR_THRESHOLD      = 120   // bpm  (stationary elevated HR → gym)
         const val FOCUS_HOUR_START          = 6     // 06:00 inclusive
         const val FOCUS_HOUR_END            = 18    // 18:00 inclusive
         const val PARTY_HOUR_START          = 20    // 20:00 — earliest party detection

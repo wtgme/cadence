@@ -2,7 +2,7 @@
 
 <img src="screenshots/logo.svg" width="128" alt="Cadence logo"/>
 
-# Cadence
+# Cadence AI Music
 
 ### Biometric-Adaptive Music for Real-Time Mood Regulation
 
@@ -21,10 +21,10 @@
 <table>
   <tr>
     <td align="center"><img src="screenshots/screen_player.png" width="160" height="347"/><br/><sub><b>Player</b><br/>Live scene & heart rate</sub></td>
-    <td align="center"><img src="screenshots/screen_reasoning.png" width="160" height="347"/><br/><sub><b>Synthesising</b><br/>Generation in progress</sub></td>
-    <td align="center"><img src="screenshots/screen_adjust.png" width="160" height="347"/><br/><sub><b>AI Reasoning Chain</b><br/>Biometric vitals & mental state</sub></td>
-    <td align="center"><img src="screenshots/screen_recommendation.png" width="160" height="347"/><br/><sub><b>Taste Profile</b><br/>Generated tracks & preferences</sub></td>
-    <td align="center"><img src="screenshots/scene_override_menu.png" width="160" height="347"/><br/><sub><b>Scene Override</b><br/>Manual context control</sub></td>
+    <td align="center"><img src="screenshots/screen_synthesising.png" width="160" height="347"/><br/><sub><b>Synthesising</b><br/>Generation in progress</sub></td>
+    <td align="center"><img src="screenshots/screen_adjust.png" width="160" height="347"/><br/><sub><b>Adjust Music</b><br/>Genre, energy, free-text prompt</sub></td>
+    <td align="center"><img src="screenshots/screen_activity_picker.png" width="160" height="347"/><br/><sub><b>Activity Picker</b><br/>Manual context override</sub></td>
+    <td align="center"><img src="screenshots/screen_settings.png" width="160" height="347"/><br/><sub><b>API Settings</b><br/>Swap in any compatible backend</sub></td>
   </tr>
 </table>
 
@@ -114,12 +114,25 @@ This design supports informed consent and user agency — principles central to 
 
 ## Setup
 
-Create `local.properties` in the project root:
+Cadence's two pipeline stages each call an HTTP endpoint, and both are configurable in-app via **API Settings**. You can mix and match:
+
+- **Step 1 — LLM** (biometrics → song style): any OpenAI-compatible chat endpoint — [OpenRouter](https://openrouter.ai/), a local Ollama / vLLM server, or the bundled `cadence-api` LLM endpoint.
+- **Step 2 — Music generation**: a text-to-music endpoint such as [MiniMax Music](https://www.minimax.io/), a self-hosted [SongGeneration](https://github.com/tencent-ailab/SongGeneration) server, or the bundled `cadence-api` music endpoint.
+
+### Self-hosted reference server (optional)
+
+[**wtgme/cadence-api**](https://github.com/wtgme/cadence-api) packages both pipeline stages into a single FastAPI service: an OpenAI-compatible chat endpoint backed by your model of choice, plus a SongGeneration wrapper. Useful if you want full local control or a private GPU deployment. **It is not required** — any compatible third-party APIs work.
+
+Set defaults at build time via `local.properties` (override in-app from the settings screen):
 
 ```
-songgen.base.url=http://10.0.2.2:8888   # emulator
-# songgen.base.url=http://<device-ip>:8888  # physical device
-openrouter.api.key=<your-key>
+signal2style.base.url=https://openrouter.ai/api/v1     # or your cadence-api host
+signal2style.api.key=<your-key>
+signal2style.model=google/gemma-3-4b-it:free
+
+songgen.base.url=https://api.minimax.io/v1/music_generation   # or your cadence-api host
+songgen.api.key=<your-key>
+songgen.model=music-2.6
 ```
 
 ### Build

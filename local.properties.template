@@ -18,3 +18,13 @@ signal2style.model=google/gemma-4-26B-A4B-it
 songgen.base.url=https://api.cadencemusics.uk/v1/music_generation
 songgen.api.key=YOUR_API_KEY_OR_DUMMY_IF_SELF_HOSTED
 songgen.model=SongGeneration-v2-large
+
+# ── Release signing (required for Play Store uploads) ───────────────────────
+# Generate a keystore once with:
+#   keytool -genkey -v -keystore ~/cadence-release.jks -keyalg RSA -keysize 2048 \
+#           -validity 10000 -alias cadence
+# Back it up — if you lose this file you can never update the app on Play Store.
+release.keystore.path=/absolute/path/to/cadence-release.jks
+release.keystore.password=YOUR_KEYSTORE_PASSWORD
+release.key.alias=cadence
+release.key.password=YOUR_KEY_PASSWORD

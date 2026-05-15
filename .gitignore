@@ -4,10 +4,12 @@
 /.idea
 .DS_Store
 /build
+/app/build
 /captures
 .externalNativeBuild
 .cxx
 *.keystore
+*.jks
 app/libs/*.aar
 scripts/test_two_step_pipeline.py
 CLAUDE.md

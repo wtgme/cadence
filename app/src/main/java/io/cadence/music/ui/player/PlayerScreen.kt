@@ -45,6 +45,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MonitorHeart
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -59,6 +61,7 @@ import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.text.KeyboardActions
@@ -130,6 +133,16 @@ import io.cadence.music.data.model.SensorState
 import io.cadence.music.data.model.UserMusicAdjustment
 import io.cadence.music.data.model.UserTasteMemory
 import io.cadence.music.ui.permissions.HEALTH_CONNECT_PERMISSIONS
+import io.cadence.music.ui.theme.CadenceBlue
+import io.cadence.music.ui.theme.CadenceBlueDeep
+import io.cadence.music.ui.theme.CadenceOrange
+import io.cadence.music.ui.theme.CadenceOrangeDeep
+import io.cadence.music.ui.theme.CadenceOrangeDim
+import io.cadence.music.ui.theme.CadenceOrangeDimHi
+import io.cadence.music.ui.theme.CadenceRed
+import io.cadence.music.ui.theme.CadenceText
+import io.cadence.music.ui.theme.CadenceTextDim
+import io.cadence.music.ui.theme.CadenceTextMute
 import io.cadence.music.ui.theme.FeedbackDislike
 import io.cadence.music.ui.theme.FeedbackLike
 import io.cadence.music.ui.theme.FeedbackNeutral
@@ -345,25 +358,58 @@ fun PlayerScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
-                // ── Header ────────────────────────────────────────────────
-                Box(
-                    modifier         = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.Center,
+                // ── Header (menu | CADENCE | settings) ────────────────────
+                Row(
+                    modifier              = Modifier.fillMaxWidth(),
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+                            .clickable { showSceneOverride = true },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector        = Icons.Default.Menu,
+                            contentDescription = "Activity picker",
+                            tint               = TextSecondary,
+                            modifier           = Modifier.size(16.dp),
+                        )
+                        ActivityPickerMenu(
+                            expanded = showSceneOverride,
+                            currentScene = confirmedScene,
+                            onSelect = { s ->
+                                viewModel.overrideScene(s)
+                                showSceneOverride = false
+                            },
+                            onAutoDetect = {
+                                viewModel.clearSceneOverride()
+                                showSceneOverride = false
+                            },
+                            onDismiss = { showSceneOverride = false },
+                        )
+                    }
                     Text(
                         text  = "CADENCE",
                         style = MaterialTheme.typography.labelLarge,
-                        color = targetGlow,
+                        color = CadenceOrange,
                     )
-                    IconButton(
-                        onClick  = onNavigateToSettings,
-                        modifier = Modifier.align(Alignment.CenterEnd).size(36.dp),
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+                            .clickable(onClick = onNavigateToSettings),
+                        contentAlignment = Alignment.Center,
                     ) {
                         Icon(
                             imageVector        = Icons.Default.Settings,
                             contentDescription = "API settings",
-                            tint               = targetGlow.copy(alpha = 0.5f),
-                            modifier           = Modifier.size(18.dp),
+                            tint               = TextSecondary,
+                            modifier           = Modifier.size(16.dp),
                         )
                     }
                 }
@@ -377,41 +423,11 @@ fun PlayerScreen(
                 ) {
                     Text(
                         text      = confirmedScene?.displayName() ?: "Detecting…",
-                        style     = MaterialTheme.typography.headlineLarge,
+                        style     = MaterialTheme.typography.displayMedium,
                         color     = TextPrimary,
                         textAlign = TextAlign.Center,
                         modifier  = if (isActive) Modifier.clickable { showReasoningModal = true } else Modifier,
                     )
-                    if (isActive) {
-                        Box(modifier = Modifier.align(Alignment.CenterEnd)) {
-                            IconButton(
-                                onClick  = { showSceneOverride = true },
-                                modifier = Modifier.size(40.dp),
-                            ) {
-                                Icon(
-                                    imageVector        = Icons.Default.Tune,
-                                    contentDescription = "Override scene",
-                                    tint               = targetGlow.copy(alpha = 0.5f),
-                                    modifier           = Modifier.size(18.dp),
-                                )
-                            }
-                            DropdownMenu(
-                                expanded         = showSceneOverride,
-                                onDismissRequest = { showSceneOverride = false },
-                                modifier         = Modifier.background(Surface2),
-                            ) {
-                                Scene.entries.forEach { s ->
-                                    DropdownMenuItem(
-                                        text    = { Text(s.displayName(), color = TextPrimary) },
-                                        onClick = {
-                                            viewModel.overrideScene(s)
-                                            showSceneOverride = false
-                                        },
-                                    )
-                                }
-                            }
-                        }
-                    }
                 }
 
                 candidateScene?.let { candidate ->
@@ -463,7 +479,7 @@ fun PlayerScreen(
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier         = Modifier
-                        .size(200.dp)
+                        .size(240.dp)
                         .semantics {
                             contentDescription = when {
                                 isBuffering -> "Generating music"
@@ -484,29 +500,49 @@ fun PlayerScreen(
                             bpm       = sensorState.heartRate,
                             glowColor = targetGlow,
                         )
+                        // Center overlay: NOW · BPM + mini waveform
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text(
+                                text  = if (sensorState.heartRate > 0)
+                                            "NOW · ${sensorState.heartRate} BPM"
+                                        else
+                                            "READING SIGNALS",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = TextSecondary,
+                            )
+                            WaveformVisualizer(
+                                isPlaying = isPlaying,
+                                bpm       = sensorState.heartRate,
+                                color     = if (isPlaying) CadenceOrange else Color.White.copy(alpha = 0.3f),
+                                modifier  = Modifier.size(width = 120.dp, height = 36.dp),
+                            )
+                            songParams?.let { params ->
+                                val lyricPreview = params.lyric.lines().firstOrNull { it.isNotBlank() }?.trim()
+                                if (!lyricPreview.isNullOrBlank()) {
+                                    Text(
+                                        text      = lyricPreview,
+                                        style     = MaterialTheme.typography.titleSmall,
+                                        color     = TextPrimary,
+                                        maxLines  = 1,
+                                        overflow  = TextOverflow.Ellipsis,
+                                        textAlign = TextAlign.Center,
+                                        modifier  = Modifier.padding(horizontal = 24.dp),
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
 
                 Spacer(Modifier.height(12.dp))
 
-                // ── Style tags + lyric preview ───────────────────────────
+                // ── Style tags (lyric preview shown inside ring) ──────────
                 songParams?.let { params ->
                     if (!params.descriptions.isNullOrBlank()) {
                         StyleTagRow(descriptions = params.descriptions, glowColor = targetGlow)
-                        Spacer(Modifier.height(6.dp))
-                    }
-                    val lyricPreview = params.lyric.lines().firstOrNull { it.isNotBlank() }?.trim()
-                    if (!lyricPreview.isNullOrBlank()) {
-                        Text(
-                            text      = lyricPreview,
-                            style     = MaterialTheme.typography.labelSmall,
-                            color     = TextTertiary,
-                            fontStyle = FontStyle.Italic,
-                            maxLines  = 1,
-                            overflow  = TextOverflow.Ellipsis,
-                            textAlign = TextAlign.Center,
-                            modifier  = Modifier.fillMaxWidth(),
-                        )
                     }
                     Spacer(Modifier.height(12.dp))
                 }
@@ -566,26 +602,25 @@ fun PlayerScreen(
                         )
                     }
 
-                    Button(
-                        onClick = { if (isActive) viewModel.stop() else viewModel.startPlayback() },
-                        enabled = !isBuffering,
-                        modifier = Modifier.size(72.dp),
-                        shape    = CircleShape,
-                        colors   = ButtonDefaults.buttonColors(
-                            containerColor = when {
-                                isBuffering -> Surface2
-                                isActive    -> Color(0xFFBF3030)
-                                else        -> targetGlow
-                            },
-                        ),
-                        elevation      = ButtonDefaults.buttonElevation(defaultElevation = 6.dp),
-                        contentPadding = PaddingValues(0.dp),
+                    // Gradient primary play/stop button
+                    val playGradient = when {
+                        isBuffering -> Brush.verticalGradient(listOf(Surface2, Surface2))
+                        isActive    -> Brush.verticalGradient(listOf(CadenceOrange, CadenceOrangeDeep))
+                        else        -> Brush.verticalGradient(listOf(CadenceBlue, CadenceBlueDeep))
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(72.dp)
+                            .clip(CircleShape)
+                            .background(playGradient)
+                            .clickable { if (isActive) viewModel.stop() else viewModel.startPlayback() },
+                        contentAlignment = Alignment.Center,
                     ) {
                         Icon(
                             imageVector        = if (isActive) Icons.Default.Stop else Icons.Default.PlayArrow,
                             contentDescription = if (isActive) "Stop" else "Play",
                             modifier           = Modifier.size(32.dp),
-                            tint               = Color.White,
+                            tint               = Color(0xFF0B1220),
                         )
                     }
 
@@ -1104,17 +1139,26 @@ private fun BottomSheetContent(
 
 @Composable
 private fun HrBadge(bpm: Int, glowColor: Color) {
-    Box(
+    Row(
         modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(glowColor.copy(alpha = 0.15f))
-            .border(1.dp, glowColor.copy(alpha = 0.3f), RoundedCornerShape(20.dp))
-            .padding(horizontal = 12.dp, vertical = 4.dp),
+            .clip(RoundedCornerShape(50))
+            .background(CadenceOrangeDim)
+            .border(1.dp, CadenceOrangeDimHi, RoundedCornerShape(50))
+            .padding(horizontal = 14.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        // Filled heart glyph
+        Box(
+            modifier = Modifier
+                .size(11.dp)
+                .clip(CircleShape)
+                .background(CadenceRed),
+        )
         Text(
-            text  = "♥ $bpm BPM",
+            text  = "$bpm BPM",
             style = MaterialTheme.typography.labelMedium,
-            color = glowColor,
+            color = CadenceOrange,
         )
     }
 }
@@ -1128,18 +1172,19 @@ private fun StyleTagRow(descriptions: String, glowColor: Color) {
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment     = Alignment.CenterVertically,
     ) {
-        items(tags) { tag ->
+        itemsIndexed(tags) { index, tag ->
+            val solid = index == 0
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(glowColor.copy(alpha = 0.12f))
-                    .border(1.dp, glowColor.copy(alpha = 0.25f), RoundedCornerShape(12.dp))
-                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                    .clip(RoundedCornerShape(50))
+                    .background(if (solid) CadenceOrange else CadenceOrangeDim)
+                    .border(1.dp, CadenceOrangeDimHi, RoundedCornerShape(50))
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
             ) {
                 Text(
                     text  = tag,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = glowColor.copy(alpha = 0.85f),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = if (solid) Color(0xFF0B1220) else CadenceOrange,
                 )
             }
         }
@@ -1177,12 +1222,12 @@ fun SongTimeline(
             },
             enabled = isEnabled && progress.durationMs > 0,
             colors  = SliderDefaults.colors(
-                thumbColor                 = glowColor,
-                activeTrackColor           = glowColor,
-                inactiveTrackColor         = Color.White.copy(alpha = 0.2f),
-                disabledThumbColor         = Color.White.copy(alpha = 0.2f),
-                disabledActiveTrackColor   = Color.White.copy(alpha = 0.15f),
-                disabledInactiveTrackColor = Color.White.copy(alpha = 0.1f),
+                thumbColor                 = Color.White,
+                activeTrackColor           = CadenceOrange,
+                inactiveTrackColor         = Color.White.copy(alpha = 0.08f),
+                disabledThumbColor         = Color.White.copy(alpha = 0.4f),
+                disabledActiveTrackColor   = CadenceBlue.copy(alpha = 0.4f),
+                disabledInactiveTrackColor = Color.White.copy(alpha = 0.06f),
             ),
             modifier = Modifier.fillMaxWidth(),
         )
@@ -2182,11 +2227,17 @@ fun AdjustmentPanel(
         label         = "adjustCardBg",
     )
 
-    GlassCard(modifier = modifier.fillMaxWidth(), backgroundColor = cardBackground) {
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(16.dp)),
+        color = cardBackground,
+        shape = RoundedCornerShape(16.dp),
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(horizontal = 18.dp, vertical = 14.dp),
         ) {
             // Header row — toggles expanded state
             Row(
@@ -2198,98 +2249,75 @@ fun AdjustmentPanel(
             ) {
                 Text(
                     text  = "ADJUST MUSIC",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = TextTertiary,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (expanded) CadenceText else TextSecondary,
                 )
                 val activeHints = buildAdjustmentHints(adjustment).joinToString(" · ")
                 Row(
                     verticalAlignment     = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     if (activeHints.isNotEmpty()) {
                         Text(
                             text  = activeHints,
                             style = MaterialTheme.typography.labelSmall,
-                            color = GlowDefault,
+                            color = CadenceOrange,
                         )
                     }
-                    Text(
-                        text  = if (expanded) "▼" else "▲",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextTertiary,
+                    Icon(
+                        imageVector        = if (expanded) Icons.Default.ExpandMore else Icons.Default.ExpandLess,
+                        contentDescription = if (expanded) "Collapse" else "Expand",
+                        tint               = CadenceBlue,
+                        modifier           = Modifier.size(16.dp),
                     )
                 }
             }
 
             if (expanded) {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(16.dp))
 
-                // Genre Chips
+                // GENRE — eyebrow + rectangular pill rail
                 Text(
                     text  = "GENRE",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = TextTertiary,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = CadenceTextMute,
                 )
-                Spacer(Modifier.height(6.dp))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    // "Auto" chip clears all genre overrides
+                Spacer(Modifier.height(10.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     item {
-                        FilterChip(
+                        GenrePill(
+                            label    = "Auto",
                             selected = adjustment.genreOverrides.isEmpty(),
-                            onClick  = { onClearGenres() },
-                            label    = { Text("Auto", style = MaterialTheme.typography.labelSmall) },
-                            colors   = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = GlowDefault.copy(alpha = 0.25f),
-                                selectedLabelColor     = GlowDefault,
-                                containerColor         = Color.Transparent,
-                                labelColor             = TextSecondary,
-                            ),
+                            onClick  = onClearGenres,
                         )
                     }
                     items(GENRE_OPTIONS) { genre ->
-                        val selected = genre in adjustment.genreOverrides
-                        FilterChip(
-                            selected = selected,
+                        GenrePill(
+                            label    = genre.replaceFirstChar { it.uppercase() },
+                            selected = genre in adjustment.genreOverrides,
                             onClick  = { onToggleGenre(genre) },
-                            label    = {
-                                Text(
-                                    genre.replaceFirstChar { it.uppercase() },
-                                    style = MaterialTheme.typography.labelSmall,
-                                )
-                            },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = GlowDefault.copy(alpha = 0.25f),
-                                selectedLabelColor     = GlowDefault,
-                                containerColor         = Color.Transparent,
-                                labelColor             = TextSecondary,
-                            ),
                         )
                     }
                 }
 
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(18.dp))
 
-                // Energy Slider
-                Row(
-                    modifier              = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text(
-                        text  = "ENERGY",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextTertiary,
-                    )
-                }
+                // ENERGY — eyebrow + slider row
+                Text(
+                    text  = "ENERGY",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = CadenceTextMute,
+                )
+                Spacer(Modifier.height(10.dp))
                 Row(
                     modifier              = Modifier.fillMaxWidth(),
                     verticalAlignment     = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Text(
-                        text     = "Calmer",
-                        style    = MaterialTheme.typography.labelSmall,
-                        color    = TextTertiary,
-                        fontSize = 9.sp,
+                        text  = "Calmer",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = CadenceTextMute,
                     )
                     Slider(
                         value                 = sliderPosition,
@@ -2303,76 +2331,119 @@ fun AdjustmentPanel(
                         steps      = 3,
                         modifier   = Modifier.weight(1f),
                         colors     = SliderDefaults.colors(
-                            thumbColor         = GlowDefault,
-                            activeTrackColor   = GlowDefault,
-                            inactiveTrackColor = Color.White.copy(alpha = 0.15f),
+                            thumbColor         = CadenceBlue,
+                            activeTrackColor   = CadenceBlue,
+                            inactiveTrackColor = Color.White.copy(alpha = 0.08f),
+                            activeTickColor    = Color.Transparent,
+                            inactiveTickColor  = Color.White.copy(alpha = 0.18f),
                         ),
                     )
                     Text(
-                        text     = "More",
-                        style    = MaterialTheme.typography.labelSmall,
-                        color    = TextTertiary,
-                        fontSize = 9.sp,
+                        text  = "More",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = CadenceTextMute,
                     )
                 }
 
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(14.dp))
 
-                // Free Text
-                OutlinedTextField(
-                    value         = freeTextValue,
-                    onValueChange = { freeTextValue = it },
-                    placeholder   = {
-                        Text(
-                            text  = "Try: 'more cinematic', 'add piano'…",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextTertiary,
-                        )
-                    },
-                    trailingIcon = {
-                        if (freeTextValue.isNotBlank()) {
-                            IconButton(
-                                onClick = {
-                                    onFreeText(freeTextValue)
-                                    freeTextValue = ""
-                                    focusManager.clearFocus()
-                                },
-                            ) {
-                                Icon(
-                                    imageVector        = Icons.AutoMirrored.Filled.Send,
-                                    contentDescription = "Apply",
-                                    tint               = GlowDefault,
-                                    modifier           = Modifier.size(18.dp),
-                                )
-                            }
-                        }
-                    },
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                    keyboardActions = KeyboardActions(onSend = {
-                        if (freeTextValue.isNotBlank()) {
-                            onFreeText(freeTextValue)
-                            freeTextValue = ""
-                            focusManager.clearFocus()
-                        }
-                    }),
-                    singleLine = true,
-                    modifier   = Modifier
+                // Prompt input — text field + blue square send button
+                Row(
+                    modifier = Modifier
                         .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .border(1.5.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
+                        .background(Color.White.copy(alpha = 0.02f))
                         .bringIntoViewRequester(bringIntoViewRequester)
-                        .onFocusChanged { focusState ->
-                            if (focusState.isFocused) {
-                                coroutineScope.launch { bringIntoViewRequester.bringIntoView() }
-                            }
+                        .padding(horizontal = 14.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    OutlinedTextField(
+                        value         = freeTextValue,
+                        onValueChange = { freeTextValue = it },
+                        placeholder   = {
+                            Text(
+                                text  = "Try: 'more cinematic', 'add piano'…",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = CadenceTextDim,
+                            )
                         },
-                    textStyle = MaterialTheme.typography.bodySmall.copy(color = TextPrimary),
-                    colors    = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor   = GlowDefault,
-                        unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
-                        cursorColor          = GlowDefault,
-                    ),
-                )
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                        keyboardActions = KeyboardActions(onSend = {
+                            if (freeTextValue.isNotBlank()) {
+                                onFreeText(freeTextValue)
+                                freeTextValue = ""
+                                focusManager.clearFocus()
+                            }
+                        }),
+                        singleLine = true,
+                        modifier   = Modifier
+                            .weight(1f)
+                            .onFocusChanged { focusState ->
+                                if (focusState.isFocused) {
+                                    coroutineScope.launch { bringIntoViewRequester.bringIntoView() }
+                                }
+                            },
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = CadenceText),
+                        colors    = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor       = Color.Transparent,
+                            unfocusedBorderColor     = Color.Transparent,
+                            disabledBorderColor      = Color.Transparent,
+                            focusedContainerColor    = Color.Transparent,
+                            unfocusedContainerColor  = Color.Transparent,
+                            cursorColor              = CadenceBlue,
+                        ),
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(30.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (freeTextValue.isNotBlank()) CadenceBlue else CadenceBlue.copy(alpha = 0.35f))
+                            .clickable(enabled = freeTextValue.isNotBlank()) {
+                                onFreeText(freeTextValue)
+                                freeTextValue = ""
+                                focusManager.clearFocus()
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector        = Icons.AutoMirrored.Filled.Send,
+                            contentDescription = "Apply",
+                            tint               = Color.White,
+                            modifier           = Modifier.size(14.dp),
+                        )
+                    }
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun GenrePill(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val shape = RoundedCornerShape(50)
+    Box(
+        modifier = Modifier
+            .clip(shape)
+            .background(if (selected) CadenceBlue else Color.Transparent)
+            .border(
+                width = 1.dp,
+                color = if (selected) CadenceBlue else Color.White.copy(alpha = 0.10f),
+                shape = shape,
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+    ) {
+        Text(
+            text  = label,
+            style = MaterialTheme.typography.titleSmall,
+            color = if (selected) Color.White else CadenceText,
+        )
     }
 }
 
