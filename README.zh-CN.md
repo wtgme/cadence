@@ -4,7 +4,7 @@
 
 # Cadence AI 音乐
 
-### 基于生物特征自适应的实时情绪调节音乐
+### 随你律动的音乐
 
 [English](README.md) · **简体中文**
 
@@ -33,15 +33,15 @@
 <table>
   <tr>
     <td align="center"><img src="screenshots/01%20_%20Welcome.png" width="160"/><br/><sub><b>欢迎</b><br/>引导入口</sub></td>
-    <td align="center"><img src="screenshots/02%20_%20Create%20account.png" width="160"/><br/><sub><b>创建账户</b><br/>注册开始使用</sub></td>
-    <td align="center"><img src="screenshots/03%20_%20Pair%20device.png" width="160"/><br/><sub><b>配对设备</b><br/>连接你的可穿戴设备</sub></td>
-    <td align="center"><img src="screenshots/04%20_%20Permissions.png" width="160"/><br/><sub><b>权限</b><br/>Health Connect 与位置</sub></td>
+    <td align="center"><img src="screenshots/02%20_%20Permissions.png" width="160"/><br/><sub><b>权限</b><br/>Health Connect 与位置</sub></td>
+    <td align="center"><img src="screenshots/03%20_%20API.png" width="160"/><br/><sub><b>API 设置</b><br/>接入你自己的密钥</sub></td>
+    <td align="center"><img src="screenshots/04%20_%20Ready.png" width="160"/><br/><sub><b>就绪</b><br/>开始你的第一次会话</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="screenshots/05%20_%20Seed%20taste.png" width="160"/><br/><sub><b>口味初始化</b><br/>个性化你的偏好档案</sub></td>
-    <td align="center"><img src="screenshots/06%20_%20Ready.png" width="160"/><br/><sub><b>就绪</b><br/>开始生成音乐</sub></td>
-    <td align="center"><img src="screenshots/09%20_%20Adjust%20music.png" width="160"/><br/><sub><b>调整音乐</b><br/>风格、能量、自由文本提示</sub></td>
-    <td align="center"><img src="screenshots/12%20_%20AI%20reasoning.png" width="160"/><br/><sub><b>AI 推理</b><br/>完整推理链</sub></td>
+    <td align="center"><img src="screenshots/05%20_%20Scene%20detection.png" width="160"/><br/><sub><b>场景识别</b><br/>自动检测当前活动</sub></td>
+    <td align="center"><img src="screenshots/06%20_%20AI%20reasoning.png" width="160"/><br/><sub><b>AI 推理</b><br/>完整推理链</sub></td>
+    <td align="center"><img src="screenshots/07%20_%20Adjust%20music.png" width="160"/><br/><sub><b>调整音乐</b><br/>风格、能量、自由文本提示</sub></td>
+    <td align="center"><img src="screenshots/08%20_%20Adjust%20scene.png" width="160"/><br/><sub><b>调整场景</b><br/>手动切换场景</sub></td>
   </tr>
 </table>
 

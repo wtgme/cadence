@@ -4,7 +4,7 @@
 
 # Cadence AI Music
 
-### Biometric-Adaptive Music for Real-Time Mood Regulation
+### Music that moves with you
 
 **English** · [简体中文](README.zh-CN.md)
 
@@ -33,15 +33,15 @@
 <table>
   <tr>
     <td align="center"><img src="screenshots/01%20_%20Welcome.png" width="160"/><br/><sub><b>Welcome</b><br/>Onboarding entry point</sub></td>
-    <td align="center"><img src="screenshots/02%20_%20Create%20account.png" width="160"/><br/><sub><b>Create Account</b><br/>Sign up to get started</sub></td>
-    <td align="center"><img src="screenshots/03%20_%20Pair%20device.png" width="160"/><br/><sub><b>Pair Device</b><br/>Connect your wearable</sub></td>
-    <td align="center"><img src="screenshots/04%20_%20Permissions.png" width="160"/><br/><sub><b>Permissions</b><br/>Health Connect & location</sub></td>
+    <td align="center"><img src="screenshots/02%20_%20Permissions.png" width="160"/><br/><sub><b>Permissions</b><br/>Health Connect & location</sub></td>
+    <td align="center"><img src="screenshots/03%20_%20API.png" width="160"/><br/><sub><b>API Setup</b><br/>Bring your own keys</sub></td>
+    <td align="center"><img src="screenshots/04%20_%20Ready.png" width="160"/><br/><sub><b>Ready</b><br/>Start your first session</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="screenshots/05%20_%20Seed%20taste.png" width="160"/><br/><sub><b>Seed Taste</b><br/>Personalise your profile</sub></td>
-    <td align="center"><img src="screenshots/06%20_%20Ready.png" width="160"/><br/><sub><b>Ready</b><br/>Start generating music</sub></td>
-    <td align="center"><img src="screenshots/09%20_%20Adjust%20music.png" width="160"/><br/><sub><b>Adjust Music</b><br/>Genre, energy, free-text prompt</sub></td>
-    <td align="center"><img src="screenshots/12%20_%20AI%20reasoning.png" width="160"/><br/><sub><b>AI Reasoning</b><br/>Full inference chain</sub></td>
+    <td align="center"><img src="screenshots/05%20_%20Scene%20detection.png" width="160"/><br/><sub><b>Scene Detection</b><br/>Auto-detected activity</sub></td>
+    <td align="center"><img src="screenshots/06%20_%20AI%20reasoning.png" width="160"/><br/><sub><b>AI Reasoning</b><br/>Full inference chain</sub></td>
+    <td align="center"><img src="screenshots/07%20_%20Adjust%20music.png" width="160"/><br/><sub><b>Adjust Music</b><br/>Genre, energy, free-text prompt</sub></td>
+    <td align="center"><img src="screenshots/08%20_%20Adjust%20scene.png" width="160"/><br/><sub><b>Adjust Scene</b><br/>Manual scene override</sub></td>
   </tr>
 </table>
 
