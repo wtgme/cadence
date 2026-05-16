@@ -2,7 +2,6 @@ package io.cadence.music.ui.onboarding
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,6 +41,7 @@ import io.cadence.music.ui.settings.ApiSettingsDraft
 import io.cadence.music.ui.settings.ApiSettingsForm
 import io.cadence.music.ui.settings.SettingsViewModel
 import io.cadence.music.ui.theme.CadenceBg
+import io.cadence.music.ui.theme.CadenceBlue
 import io.cadence.music.ui.theme.CadenceOrange
 import io.cadence.music.ui.theme.CadenceOrangeDim
 import io.cadence.music.ui.theme.CadenceOrangeDimHi
@@ -54,13 +54,11 @@ import kotlinx.coroutines.launch
  * Onboarding API setup. Shows defaults pre-filled, warns the user that the
  * defaults are the developer's personal endpoints, and lets them substitute
  * their own keys. Reused in two contexts (mid-onboarding and existing-user
- * one-shot after update) via flow-specific [onSaveAndContinue] / [onUseDefaults]
- * callbacks.
+ * one-shot after update) via flow-specific [onSaveAndContinue].
  */
 @Composable
 fun ApiSetupScreen(
     onSaveAndContinue: () -> Unit,
-    onUseDefaults: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val settings by viewModel.settings.collectAsState()
@@ -91,27 +89,27 @@ fun ApiSetupScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 24.dp),
+                    .padding(horizontal = 28.dp),
             ) {
                 Text(
-                    text  = "API SETUP",
-                    color = CadenceOrange,
-                    style = MaterialTheme.typography.labelLarge,
+                    text  = "STEP 03 / API SETUP",
+                    color = CadenceBlue,
+                    style = MaterialTheme.typography.labelMedium,
                 )
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(10.dp))
                 Text(
-                    text  = "Bring your own keys",
+                    text  = "Bring your\nown keys",
                     color = CadenceText,
-                    style = MaterialTheme.typography.displaySmall,
+                    style = MaterialTheme.typography.headlineLarge,
                 )
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(10.dp))
                 Text(
                     text  = "Cadence ships with shared default endpoints so you can try it immediately — but you'll get faster, more reliable generation with your own.",
                     color = CadenceTextMute,
                     style = MaterialTheme.typography.bodyMedium,
                 )
 
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(20.dp))
 
                 // Warning banner
                 Row(
@@ -167,25 +165,7 @@ fun ApiSetupScreen(
                     tone = CadenceButtonTone.Blue,
                 )
 
-                Spacer(Modifier.height(10.dp))
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable(onClick = onUseDefaults)
-                        .padding(vertical = 12.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text       = "Use defaults for now",
-                        color      = CadenceOrange,
-                        style      = MaterialTheme.typography.titleMedium,
-                        textAlign  = TextAlign.Center,
-                    )
-                }
-
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(14.dp))
                 Text(
                     text       = "You can change these anytime from Settings (top-right of the player).",
                     color      = CadenceTextMute,

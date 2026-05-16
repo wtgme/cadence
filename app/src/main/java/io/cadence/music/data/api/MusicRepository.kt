@@ -461,6 +461,16 @@ class MusicRepository @Inject constructor(
               - Late night (after 9 pm) → circadian low (lower arousal/energy)
               - Rain/overcast → lower valence; sun/clear → higher valence
               - Weekday commute → more stress than weekend leisure
+
+            UNKNOWN HR HANDLING:
+              When HR is "unknown" (user has no wearable / no recent samples), do NOT default arousal
+              to 5. Use Activity, GPS speed, time of day, and step count as the primary arousal proxies:
+                - Stationary + no activity + low steps today → arousal 2–3
+                - Walking / casual GPS speed → arousal 3–5
+                - Running / Cycling / Workout scene → arousal 6–8
+                - Late evening / night → cap arousal at 3 regardless of other signals
+              When HR is unknown, lean conservative: pick the LOWER end of each range above. We can
+              always nudge up later if HR data appears.
         """.trimIndent()
 
         // ── Step 1b: MentalState → SongParams ─────────────────────────────────
@@ -495,14 +505,21 @@ class MusicRepository @Inject constructor(
 
             PRIORITY 2 — ISO-PRINCIPLE (match then nudge):
               Match music energy to current arousal; nudge valence gently upward. Do not jump more
-              than one tier from current arousal.
-                arousal 8–10 → electronic, rock, or pop + energetic/powerful/euphoric + drums/synthesizer/electric guitar
-                               auto_prompt_audio_type: Electronic, Rock, or Pop
-                arousal 5–7  → pop, funk, or r&b + focused/uplifting/cheerful + bass guitar/synthesizer/piano
-                               auto_prompt_audio_type: Pop, Funk, or R&B/Soul
-                arousal 3–4  → jazz, folk, or classical + focused/cheerful/introspective + piano/saxophone/acoustic guitar
-                               auto_prompt_audio_type: Jazz, Ballad, or Soundtrack
+              than one tier from current arousal. Each tier lists multiple genres — VARY your pick
+              across songs, do not default to the first option.
+                arousal 8–10 → electronic, rock, pop, hip-hop, or funk + energetic/powerful/euphoric + drums/synthesizer/electric guitar
+                               auto_prompt_audio_type: Electronic, Rock, Pop, Hip-Hop, or Metal
+                arousal 5–7  → pop, funk, r&b, hip-hop, or blues + focused/uplifting/cheerful + bass guitar/synthesizer/piano
+                               auto_prompt_audio_type: Pop, Funk, R&B/Soul, Hip-Hop, or Latin
+                arousal 3–4  → jazz, folk, classical, or ambient + focused/cheerful/introspective + piano/saxophone/acoustic guitar
+                               INSTRUMENT RESTRICTION: minimise percussion. No drum machine; drums only
+                               as soft brushes if at all. No synthesizer leads with rhythmic pulse.
+                               auto_prompt_audio_type: Jazz, Ballad, World, or Soundtrack
                 arousal 0–2  → ambient, classical, or new-age + calm/peaceful/dreamy + piano/strings/flute
+                               INSTRUMENT RESTRICTION: piano, strings, flute, or acoustic guitar ONLY.
+                               NEVER use drums, drum machine, synthesizer, electric guitar, or bass guitar
+                               — these introduce rhythmic pulse incompatible with rest/sleep states.
+                               Prefer sustained, slow-attack timbres (pads, bowed strings, soft piano).
                                auto_prompt_audio_type: Soundtrack or Ballad
 
             PRIORITY 3 — MODIFIERS (apply after Priorities 1 and 2):
@@ -516,8 +533,12 @@ class MusicRepository @Inject constructor(
               - Encode tempo through genre — do NOT use words like fast, slow, mid-tempo, driving, upbeat.
               - Include at least one instrument tag and at least one emotion tag.
               - descriptions must be a single comma-separated string, not an array.
-              - If a "Previous song" is provided: do not repeat the exact same primary genre AND
-                instrument combination. Stay within the same arousal tier but vary the sound.
+
+            ROTATION RULE (apply whenever biometric state is similar to recent songs):
+              - Track the primary genre of the last 1–3 songs from the "Previous song" / "Recent songs"
+                context. Do NOT repeat the immediately preceding primary genre. Rotate across the full
+                allowed list for the current tier rather than defaulting to one favourite.
+              - Also vary the primary instrument across consecutive songs even when genre is similar.
         """.trimIndent()
 
         // ── Single-query fallback (original prompt) ────────────────────────────
@@ -542,11 +563,16 @@ class MusicRepository @Inject constructor(
                   Pop, Latin, Rock, Electronic, Metal, Country, R&B/Soul, Ballad, Jazz, World, Hip-Hop, Funk, Soundtrack, Auto
                   NOTE: "Ambient" is NOT valid — use Soundtrack instead.
 
-            Encode tempo through genre — do NOT use words like fast/slow/mid-tempo/driving/upbeat:
-              145+ BPM → electronic or rock + energetic/powerful + drums
-              110–130 BPM → pop or funk + energetic/uplifting + bass guitar
-              90–110 BPM  → jazz or folk + focused/cheerful + piano or saxophone
-              <60 BPM     → ambient or classical or new-age + calm/peaceful/dreamy + piano or strings
+            Encode tempo through genre — do NOT use words like fast/slow/mid-tempo/driving/upbeat.
+            Each tier lists multiple genres — VARY your pick across songs, do not default to the first:
+              145+ BPM    → electronic, rock, hip-hop, or funk + energetic/powerful + drums
+              110–130 BPM → pop, funk, r&b, or hip-hop + energetic/uplifting + bass guitar
+              90–110 BPM  → jazz, blues, r&b, folk, or classical + focused/cheerful + piano or saxophone
+              60–90 BPM   → jazz, folk, classical, or ambient + introspective/relaxing + piano or acoustic guitar
+                            (minimise percussion — no drum machine; soft brushes only)
+              <60 BPM     → ambient, classical, or new-age + calm/peaceful/dreamy + piano or strings
+                            (NO drums, drum machine, synthesizer, electric guitar, or bass guitar —
+                            these break the rest/sleep tempo. Use sustained pads, bowed strings, soft piano.)
 
             Rules:
               - Follow the Energy Tier in Music guidance exactly
@@ -554,6 +580,8 @@ class MusicRepository @Inject constructor(
               - Low REM / low deep sleep flags → no drums or drum machine; use piano, strings, or acoustic guitar
               - Night/evening → add dreamy or introspective; no drum machine
               - Never mix contradictory emotions (e.g. calm + energetic)
+              - Rotation: if a "Previous song" or recent-history context is provided, do NOT repeat
+                the immediately preceding primary genre. Rotate across the tier's allowed list.
         """.trimIndent()
     }
 }

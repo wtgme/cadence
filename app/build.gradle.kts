@@ -32,7 +32,7 @@ android {
         applicationId = "io.cadence.music"
         minSdk = 30
         targetSdk = 36
-        versionCode = 9
+        versionCode = 10
         versionName = "0.6.0"
 
         buildConfigField("String", "SIGNAL2STYLE_BASE_URL", "\"${localProps.getProperty("signal2style.base.url", "https://openrouter.ai/api/v1")}\"")

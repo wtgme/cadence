@@ -13,8 +13,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -53,7 +55,8 @@ fun ReadyScreen(onStartListening: () -> Unit) {
 
             Column(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = 28.dp),
             ) {
                 LivePreviewCard(title = "Morning Drift", subtitle = "seeded from your taste · 92 BPM")
@@ -74,21 +77,21 @@ fun ReadyScreen(onStartListening: () -> Unit) {
                     ProfileRow(label = "Default scene", value = "auto-detect", dot = CadenceBlue)
                     ProfileRow(label = "Pipeline", value = "biometric → style → song", dot = CadenceOrange)
                 }
+            }
 
-                Spacer(Modifier.weight(1f))
-
-                PrimaryCadenceButton(
-                    text = "Start listening",
-                    onClick = onStartListening,
-                    tone = CadenceButtonTone.Orange,
-                )
-                Spacer(Modifier.height(14.dp))
+            Column(modifier = Modifier.padding(horizontal = 28.dp)) {
                 Text(
-                    text = "Your first session calibrates Cadence to your\nbaseline. Headphones recommended.",
+                    text = "Your first track may take a minute to warm up\nwhile we calibrate.",
                     color = CadenceTextDim,
                     style = MaterialTheme.typography.bodySmall,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(14.dp))
+                PrimaryCadenceButton(
+                    text = "Start listening",
+                    onClick = onStartListening,
+                    tone = CadenceButtonTone.Orange,
                 )
                 Spacer(Modifier.height(22.dp))
             }

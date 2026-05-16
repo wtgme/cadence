@@ -94,7 +94,13 @@ class PromptBuilder @Inject constructor() {
                 scene == Scene.FOCUS -> 2                            // Focus → Medium cap (calm, non-distracting)
                 else -> 4
             }
-            val effectiveTier = if (readinessTier > 0) minOf(readinessTier, contextCap) else contextCap
+            // No HR + sedentary scene → drop one tier. Without HR we cannot
+            // confirm elevated arousal, so default to calmer music rather than
+            // assume mid-tempo "active recovery".
+            val hrUnknown = state.heartRate <= 0
+            val sedentary = scene == Scene.RESTING || scene == Scene.FOCUS || scene == null
+            val cappedForUnknownHr = if (hrUnknown && sedentary) (contextCap - 1).coerceAtLeast(1) else contextCap
+            val effectiveTier = if (readinessTier > 0) minOf(readinessTier, cappedForUnknownHr) else cappedForUnknownHr
             val (tierLabel, bpmNote) = when (effectiveTier) {
                 4    -> "Very High" to "target 145+ BPM (sympathetic drive)"
                 3    -> "High"      to "target 110–130 BPM (flow state)"

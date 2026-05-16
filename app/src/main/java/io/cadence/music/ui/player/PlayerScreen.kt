@@ -248,16 +248,14 @@ fun PlayerScreen(
     var healthBannerDismissed by remember { mutableStateOf(false) }
     var adjustmentExpanded    by remember { mutableStateOf(false) }
 
-    // Animate hero bottom padding so content shifts up when the adjustment
-    // panel expands and relaxes toward the bottom when it's collapsed.
+    // Hero bottom padding reserves space for the collapsed adjustment bar and
+    // any banners. Kept constant across active/inactive so tapping play doesn't
+    // re-centre the hero column; the expanded panel overlays the hero on a
+    // higher z-layer (BottomCenter alignment) so we don't grow the pad for it.
     val heroBottomPad by animateDpAsState(
-        targetValue = when {
-            !isActive          -> 64.dp
-            adjustmentExpanded -> 290.dp
-            else               -> {
-                val base = if (hasHistory) 148.dp else 100.dp
-                if (!currentAdjustment.isEmpty()) (base - 44.dp).coerceAtLeast(72.dp) else base
-            }
+        targetValue = run {
+            val base = if (hasHistory) 148.dp else 100.dp
+            if (!currentAdjustment.isEmpty()) (base - 44.dp).coerceAtLeast(72.dp) else base
         },
         animationSpec = tween(durationMillis = 350),
         label         = "heroBottomPad",
@@ -509,7 +507,7 @@ fun PlayerScreen(
                                 text  = if (sensorState.heartRate > 0)
                                             "NOW · ${sensorState.heartRate} BPM"
                                         else
-                                            "READING SIGNALS",
+                                            "NO HR DATA",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = TextSecondary,
                             )
@@ -641,7 +639,11 @@ fun PlayerScreen(
                 Spacer(Modifier.height(16.dp))
 
                 // ── Feedback ──────────────────────────────────────────────
-                if (isActive) {
+                AnimatedVisibility(
+                    visible = isActive,
+                    enter   = fadeIn() + slideInVertically { 20 },
+                    exit    = fadeOut() + slideOutVertically { 20 },
+                ) {
                     TrackFeedbackRow(
                         tasteMemory   = tasteMemory,
                         onThumbsUp    = { viewModel.thumbsUp() },
@@ -2234,13 +2236,12 @@ fun AdjustmentPanel(
         if (!expanded) focusManager.clearFocus()
     }
 
-    // Darken the card when expanded so text fields are readable without breaking the dark theme
-    val cardBackground by animateColorAsState(
-        targetValue   = if (expanded) Color(0xFF0E1117).copy(alpha = 0.92f)
-                        else Color.White.copy(alpha = 0.05f),
-        animationSpec = tween(300),
-        label         = "adjustCardBg",
-    )
+    // Darken the card when expanded so text fields are readable without breaking the
+    // dark theme. Snap rather than lerp — interpolating from a translucent white to a
+    // near-opaque dark passes through a brighter gray-translucent midpoint that reads as
+    // a flash against the dark hero.
+    val cardBackground = if (expanded) Color(0xFF0E1117).copy(alpha = 0.92f)
+                         else Color.White.copy(alpha = 0.05f)
 
     Surface(
         modifier = modifier

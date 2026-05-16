@@ -101,11 +101,6 @@ fun CadenceNavHost() {
                         popUpTo(Routes.WELCOME) { inclusive = false }
                     }
                 },
-                onUseDefaults = {
-                    navController.navigate(Routes.READY) {
-                        popUpTo(Routes.WELCOME) { inclusive = false }
-                    }
-                },
             )
         }
 
@@ -114,12 +109,6 @@ fun CadenceNavHost() {
         composable(Routes.API_SETUP_FIRST_RUN) {
             ApiSetupScreen(
                 onSaveAndContinue = {
-                    onboardingVm.markApiSetupSeen()
-                    navController.navigate(Routes.PLAYER) {
-                        popUpTo(Routes.API_SETUP_FIRST_RUN) { inclusive = true }
-                    }
-                },
-                onUseDefaults = {
                     onboardingVm.markApiSetupSeen()
                     navController.navigate(Routes.PLAYER) {
                         popUpTo(Routes.API_SETUP_FIRST_RUN) { inclusive = true }

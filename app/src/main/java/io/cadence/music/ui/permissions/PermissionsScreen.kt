@@ -19,8 +19,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.LocationOn
@@ -149,87 +151,82 @@ fun PermissionsScreen(onAllGranted: () -> Unit) {
             .systemBarsPadding(),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            OnboardingTopBar(
-                step = 1,
-                trailing = {
-                    Text(
-                        text = "Why?",
-                        color = CadenceTextMute,
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                },
-            )
-
-            Column(modifier = Modifier.padding(horizontal = 28.dp)) {
-                Text(
-                    text = "STEP 02 / PERMISSIONS",
-                    color = CadenceBlue,
-                    style = MaterialTheme.typography.labelMedium,
-                )
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    text = "Grant access to\nyour signals",
-                    color = CadenceText,
-                    style = MaterialTheme.typography.headlineLarge,
-                )
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    text = "Cadence reads these locally on-device. Nothing is uploaded raw.",
-                    color = CadenceTextMute,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
-
-            Spacer(Modifier.height(20.dp))
+            OnboardingTopBar(step = 1)
 
             Column(
-                modifier = Modifier.padding(horizontal = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState()),
             ) {
-                PermissionRow(
-                    icon = Icons.Default.Favorite,
-                    title = "Health & biosignals",
-                    body = "Heart rate, motion, sleep readiness. Drives BPM-matched generation.",
-                    tag = PermTag.Required,
-                    granted = healthGranted,
-                    onToggle = { healthLauncher.launch(HEALTH_CONNECT_PERMISSIONS) },
-                )
-                PermissionRow(
-                    icon = Icons.Default.LocationOn,
-                    title = "Location & motion",
-                    body = "Detects walking, running, transit. Lets the soundtrack switch with the scene.",
-                    tag = PermTag.Required,
-                    granted = locationGranted,
-                    onToggle = {
-                        locationLauncher.launch(
-                            arrayOf(
-                                Manifest.permission.ACCESS_FINE_LOCATION,
-                                Manifest.permission.ACCESS_COARSE_LOCATION,
-                            )
-                        )
-                    },
-                )
-                PermissionRow(
-                    icon = Icons.Default.Mic,
-                    title = "Microphone",
-                    body = "Sample ambient timbre to colour mixes. Audio never leaves the device.",
-                    tag = PermTag.Optional,
-                    granted = false,
-                    onToggle = { /* not currently requested */ },
-                )
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    PermissionRow(
-                        icon = Icons.Default.Notifications,
-                        title = "Notifications",
-                        body = "Background playback controls and session reminders.",
-                        tag = PermTag.Optional,
-                        granted = notificationsGranted,
-                        onToggle = { notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) },
+                Column(modifier = Modifier.padding(horizontal = 28.dp)) {
+                    Text(
+                        text = "STEP 02 / PERMISSIONS",
+                        color = CadenceBlue,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        text = "Grant access to\nyour signals",
+                        color = CadenceText,
+                        style = MaterialTheme.typography.headlineLarge,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        text = "Cadence reads these locally on-device. Nothing is uploaded raw.",
+                        color = CadenceTextMute,
+                        style = MaterialTheme.typography.bodyMedium,
                     )
                 }
-            }
 
-            Spacer(Modifier.weight(1f))
+                Spacer(Modifier.height(20.dp))
+
+                Column(
+                    modifier = Modifier.padding(horizontal = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    PermissionRow(
+                        icon = Icons.Default.Favorite,
+                        title = "Health & biosignals",
+                        body = "Heart rate, motion, sleep readiness. Drives BPM-matched generation.",
+                        tag = PermTag.Required,
+                        granted = healthGranted,
+                        onToggle = { healthLauncher.launch(HEALTH_CONNECT_PERMISSIONS) },
+                    )
+                    PermissionRow(
+                        icon = Icons.Default.LocationOn,
+                        title = "Location & motion",
+                        body = "Detects walking, running, transit. Lets the soundtrack switch with the scene.",
+                        tag = PermTag.Required,
+                        granted = locationGranted,
+                        onToggle = {
+                            locationLauncher.launch(
+                                arrayOf(
+                                    Manifest.permission.ACCESS_FINE_LOCATION,
+                                    Manifest.permission.ACCESS_COARSE_LOCATION,
+                                )
+                            )
+                        },
+                    )
+                    PermissionRow(
+                        icon = Icons.Default.Mic,
+                        title = "Microphone",
+                        body = "Sample ambient timbre to colour mixes. Audio never leaves the device.",
+                        tag = PermTag.Optional,
+                        granted = false,
+                        onToggle = { /* not currently requested */ },
+                    )
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        PermissionRow(
+                            icon = Icons.Default.Notifications,
+                            title = "Notifications",
+                            body = "Background playback controls and session reminders.",
+                            tag = PermTag.Optional,
+                            granted = notificationsGranted,
+                            onToggle = { notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) },
+                        )
+                    }
+                }
+            }
 
             Column(
                 modifier = Modifier.padding(horizontal = 28.dp, vertical = 22.dp),
