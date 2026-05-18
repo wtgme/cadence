@@ -62,11 +62,20 @@ class AudioBufferManager @Inject constructor(
     @Volatile private var generationEpoch = 0L
 
     /**
-     * Mental state estimated at session start (Step 1a). Set once by [prime]; cleared on
-     * [cancelGeneration] or the next [prime]. Survives [drainAndReprime] and
-     * [applyUserAdjustment] — the user's physiology doesn't change within a session.
+     * Mental state estimated by Step 1a. Set by [prime] at session start and refreshed by
+     * [drainAndReprime] when context shifts (HR drift / scene change), subject to a
+     * [MENTAL_STATE_MIN_REESTIMATE_INTERVAL_MS] floor to prevent rapid flapping. Cleared on
+     * [cancelGeneration] and the next [prime]. Survives [applyUserAdjustment] — the user's
+     * physiology didn't change, only their stated preference.
      */
     @Volatile private var sessionMentalState: MentalState? = null
+
+    /**
+     * Wall-clock timestamp of the last successful Step 1a estimate (or the cache load time
+     * when [prime] reused a persisted estimate). Used by [drainAndReprime] to gate
+     * re-estimation so HR drift / scene change can't fire Step 1a back-to-back.
+     */
+    @Volatile private var lastMentalStateEstimateMs: Long = 0L
 
     /**
      * Params fetched from Signal2Style at the start of a session (or after a user adjustment).
@@ -182,6 +191,7 @@ class AudioBufferManager @Inject constructor(
                     try {
                         paramsBuilder.buildParams(state, scene).also {
                             sessionMentalState = musicRepository.translatedMentalState.value
+                            lastMentalStateEstimateMs = System.currentTimeMillis()
                             sessionParams = it
                             persistSessionParams(it, sessionMentalState, scene, state.heartRate)
                             Log.d(TAG, "Worker: full re-query fallback done — descriptions=${it.descriptions}")
@@ -199,6 +209,7 @@ class AudioBufferManager @Inject constructor(
                 try {
                     paramsBuilder.buildParams(state, scene).also {
                         sessionMentalState = musicRepository.translatedMentalState.value
+                        lastMentalStateEstimateMs = System.currentTimeMillis()
                         sessionParams = it
                         persistSessionParams(it, sessionMentalState, scene, state.heartRate)
                         Log.d(TAG, "Worker: Signal2Style params fetched — descriptions=${it.descriptions} type=${it.auto_prompt_audio_type}")
@@ -310,12 +321,14 @@ class AudioBufferManager @Inject constructor(
         sessionMentalState = null
         sessionParams = null
         previousSongParams = null
+        lastMentalStateEstimateMs = 0L
 
         val cached = lastSessionParams.load()
         if (cached != null && lastSessionParams.isFreshFor(cached, scene, sensorState.heartRate)) {
             Log.d(TAG, "prime: reusing persisted params (age=${(System.currentTimeMillis() - cached.savedAtMs) / 1000}s, scene=${cached.scene}, hr=${cached.heartRate})")
             sessionParams = cached.params
             sessionMentalState = cached.mentalState
+            lastMentalStateEstimateMs = cached.savedAtMs
             _currentSongParams.value = cached.params
             _currentMentalState.value = cached.mentalState
         }
@@ -338,8 +351,9 @@ class AudioBufferManager @Inject constructor(
      * Cancel any in-flight generation, flush all queued chunks, and restart with new
      * context. Bumps the epoch so stale results are discarded.
      *
-     * Does NOT clear [sessionParams] — mid-session context shifts (HR drift, scene change)
-     * reuse the style established at session start rather than burning another Signal2Style call.
+     * If the cached Step 1a estimate is older than [MENTAL_STATE_MIN_REESTIMATE_INTERVAL_MS],
+     * clear it so the next request re-runs Step 1a with fresh biometrics. Within the floor
+     * the cached state is kept and only Step 1b will re-run (path 2 in [processNextRequest]).
      */
     fun drainAndReprime(sensorState: SensorState, scene: Scene?) {
         cancelActiveJobs()
@@ -352,6 +366,16 @@ class AudioBufferManager @Inject constructor(
         queuedCount.set(0)
         _chunksReady.value = 0
         _lastError.value = null
+
+        val ageMs = System.currentTimeMillis() - lastMentalStateEstimateMs
+        if (lastMentalStateEstimateMs > 0L && ageMs >= MENTAL_STATE_MIN_REESTIMATE_INTERVAL_MS) {
+            Log.d(TAG, "drainAndReprime: invalidating MentalState (age=${ageMs / 1000}s) — Step 1a will re-run")
+            sessionMentalState = null
+            sessionParams = null
+        } else {
+            Log.d(TAG, "drainAndReprime: keeping MentalState (age=${ageMs / 1000}s, floor=${MENTAL_STATE_MIN_REESTIMATE_INTERVAL_MS / 1000}s) — Step 1b only")
+        }
+
         enqueueGeneration(sensorState, scene)
     }
 
@@ -403,6 +427,7 @@ class AudioBufferManager @Inject constructor(
         sessionMentalState = null
         sessionParams = null
         previousSongParams = null
+        lastMentalStateEstimateMs = 0L
         Log.d(TAG, "Generation cancelled (epoch=$generationEpoch), buffer cleared")
     }
 
@@ -436,5 +461,7 @@ class AudioBufferManager @Inject constructor(
         private const val TAG = "AudioBufferManager"
         private const val MAX_HISTORY = 50
         private const val MAX_CONCURRENT_GENERATIONS = 2
+        /** Minimum gap between two Step 1a estimates triggered by context shifts. */
+        private const val MENTAL_STATE_MIN_REESTIMATE_INTERVAL_MS = 60_000L
     }
 }
