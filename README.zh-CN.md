@@ -8,6 +8,8 @@
 
 [English](README.md) · **简体中文**
 
+**Android** · [iOS](https://github.com/wtgme/cadence-ios)
+
 [![平台](https://img.shields.io/badge/平台-Android%2010%2B-3DDC84?logo=android&logoColor=white)](https://developer.android.com)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
 [![Google Play](https://img.shields.io/badge/Google%20Play-审核中-414141?logo=googleplay&logoColor=white)](https://play.google.com/apps/internaltest/4701327609853151006)
