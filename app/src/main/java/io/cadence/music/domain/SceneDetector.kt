@@ -1,5 +1,7 @@
 package io.cadence.music.domain
 
+import io.cadence.music.data.model.ActiveWorkoutType
+import io.cadence.music.data.model.MotionActivity
 import io.cadence.music.data.model.Scene
 import io.cadence.music.data.model.SensorState
 import javax.inject.Inject
@@ -8,28 +10,45 @@ import javax.inject.Singleton
 @Singleton
 class SceneDetector @Inject constructor() {
 
-    fun detect(state: SensorState): Scene = when {
-        // Commuting: vehicle speed
-        state.speedKmh >= COMMUTING_SPEED_THRESHOLD -> Scene.COMMUTING
+    fun detect(state: SensorState): Scene {
+        // 1. Watch-reported workout is the highest-confidence signal — a sensor on the
+        //    wrist already classified the activity. Use it directly, regardless of GPS
+        //    speed (handles treadmill, stationary bike, rowing, elliptical, etc.).
+        state.activeWorkoutType?.let { workout ->
+            return when (workout) {
+                ActiveWorkoutType.RUNNING, ActiveWorkoutType.HIIT -> Scene.RUNNING
+                ActiveWorkoutType.CYCLING -> Scene.CYCLING
+                ActiveWorkoutType.WALKING -> Scene.WALKING
+                ActiveWorkoutType.ROWING, ActiveWorkoutType.ELLIPTICAL, ActiveWorkoutType.OTHER -> Scene.WORKOUT
+            }
+        }
 
-        // Running: high speed or very high HR (gym sprint, treadmill)
-        state.speedKmh >= RUNNING_SPEED_THRESHOLD || state.heartRate > RUNNING_HR_THRESHOLD -> Scene.RUNNING
+        // 2. Outdoor activity — GPS gives a reliable speed signal, prefer it.
+        when {
+            state.speedKmh >= COMMUTING_SPEED_THRESHOLD -> return Scene.COMMUTING
+            state.speedKmh >= RUNNING_SPEED_THRESHOLD || state.heartRate > RUNNING_HR_THRESHOLD -> return Scene.RUNNING
+            state.speedKmh >= CYCLING_SPEED_THRESHOLD -> return Scene.CYCLING
+            state.speedKmh >= WALKING_SPEED_THRESHOLD -> return Scene.WALKING
+        }
 
-        // Cycling: moderate speed but HR not in running zone
-        state.speedKmh >= CYCLING_SPEED_THRESHOLD -> Scene.CYCLING
+        // 3. Indoor / stationary path — GPS is ~0, so trust the on-device motion
+        //    classifier. Only treat running/cycling/walking as authoritative; the
+        //    stationary/automotive verdicts add no information over the fallthrough.
+        if (state.speedKmh < WALKING_SPEED_THRESHOLD) {
+            when (state.motionActivity) {
+                MotionActivity.RUNNING -> return Scene.RUNNING
+                MotionActivity.CYCLING -> return Scene.CYCLING
+                MotionActivity.WALKING -> return Scene.WALKING
+                MotionActivity.STATIONARY, MotionActivity.AUTOMOTIVE, MotionActivity.UNKNOWN, null -> Unit
+            }
+        }
 
-        // Walking: human pace
-        state.speedKmh >= WALKING_SPEED_THRESHOLD -> Scene.WALKING
-
-        // Party: evening/night, elevated HR (but not workout-level), weekend or Friday night
-        isPartyContext(state) -> Scene.PARTY
-
-        // Stationary — distinguish by HR and time of day
-        state.heartRate > WORKOUT_HR_THRESHOLD -> Scene.WORKOUT
-
-        state.hourOfDay in FOCUS_HOUR_START..FOCUS_HOUR_END -> Scene.FOCUS
-
-        else -> Scene.RESTING
+        return when {
+            isPartyContext(state) -> Scene.PARTY
+            state.heartRate > WORKOUT_HR_THRESHOLD -> Scene.WORKOUT
+            state.hourOfDay in FOCUS_HOUR_START..FOCUS_HOUR_END -> Scene.FOCUS
+            else -> Scene.RESTING
+        }
     }
 
     private fun isPartyContext(state: SensorState): Boolean {

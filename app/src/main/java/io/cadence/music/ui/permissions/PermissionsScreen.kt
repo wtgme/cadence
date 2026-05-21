@@ -198,14 +198,7 @@ fun PermissionsScreen(onAllGranted: () -> Unit) {
                         body = "Detects walking, running, transit. Lets the soundtrack switch with the scene.",
                         tag = PermTag.Required,
                         granted = locationGranted,
-                        onToggle = {
-                            locationLauncher.launch(
-                                arrayOf(
-                                    Manifest.permission.ACCESS_FINE_LOCATION,
-                                    Manifest.permission.ACCESS_COARSE_LOCATION,
-                                )
-                            )
-                        },
+                        onToggle = { locationLauncher.launch(locationPermissions()) },
                     )
                     PermissionRow(
                         icon = Icons.Default.Mic,
@@ -235,12 +228,7 @@ fun PermissionsScreen(onAllGranted: () -> Unit) {
                     text = if (locationGranted) "Continue" else "Allow & continue",
                     onClick = {
                         if (locationGranted) onAllGranted()
-                        else locationLauncher.launch(
-                            arrayOf(
-                                Manifest.permission.ACCESS_FINE_LOCATION,
-                                Manifest.permission.ACCESS_COARSE_LOCATION,
-                            )
-                        )
+                        else locationLauncher.launch(locationPermissions())
                     },
                     tone = CadenceButtonTone.Blue,
                     enabled = true,
@@ -248,6 +236,22 @@ fun PermissionsScreen(onAllGranted: () -> Unit) {
             }
         }
     }
+}
+
+/**
+ * Permissions tied to the "Location & motion" row. On Android 10+ we also bundle
+ * ACTIVITY_RECOGNITION so the on-device motion classifier (treadmill / stationary
+ * bike) can run; on older versions it is granted at install time.
+ */
+private fun locationPermissions(): Array<String> {
+    val perms = mutableListOf(
+        Manifest.permission.ACCESS_FINE_LOCATION,
+        Manifest.permission.ACCESS_COARSE_LOCATION,
+    )
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        perms += Manifest.permission.ACTIVITY_RECOGNITION
+    }
+    return perms.toTypedArray()
 }
 
 private enum class PermTag { Required, Optional }

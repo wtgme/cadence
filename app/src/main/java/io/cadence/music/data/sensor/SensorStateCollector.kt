@@ -1,5 +1,7 @@
 package io.cadence.music.data.sensor
 
+import io.cadence.music.data.model.ActiveWorkoutType
+import io.cadence.music.data.model.MotionActivity
 import io.cadence.music.data.model.SensorState
 import io.cadence.music.domain.ReadinessCalculator
 import kotlinx.coroutines.CoroutineScope
@@ -22,6 +24,8 @@ class SensorStateCollector @Inject constructor(
     private val sleepRepository: SleepRepository,
     private val healthExtrasRepository: HealthExtrasRepository,
     private val weatherRepository: WeatherRepository,
+    private val motionActivityRepository: MotionActivityRepository,
+    private val workoutSessionRepository: WorkoutSessionRepository,
     private val readinessCalculator: ReadinessCalculator,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -35,6 +39,8 @@ class SensorStateCollector @Inject constructor(
         sleepRepository.sleepScore,
         healthExtrasRepository.extras,
         weatherRepository.weather,
+        motionActivityRepository.activity,
+        workoutSessionRepository.activeType,
     ) { values ->
         val location = values[0] as LocationData
         val heartRate = values[1] as Int
@@ -42,6 +48,10 @@ class SensorStateCollector @Inject constructor(
         val sleep = values[3] as SleepScore
         val extras = values[4] as HealthExtras
         val weather = values[5] as String
+        @Suppress("UNCHECKED_CAST")
+        val motion = values[6] as MotionActivity?
+        @Suppress("UNCHECKED_CAST")
+        val workout = values[7] as ActiveWorkoutType?
 
         val hasSleep = sleep.durationHours > 0f
 
@@ -81,6 +91,8 @@ class SensorStateCollector @Inject constructor(
             distanceKm = extras.distanceKm,
             readinessScore = readiness.score,
             readinessBreakdown = readiness.breakdown,
+            motionActivity = motion,
+            activeWorkoutType = workout,
         )
     }.distinctUntilChanged { old, new ->
         // Suppress re-emission when only GPS noise changed — avoids redundant
@@ -93,14 +105,18 @@ class SensorStateCollector @Inject constructor(
             old.activityMinutesToday == new.activityMinutesToday &&
             old.spo2 == new.spo2 &&
             old.stepsToday == new.stepsToday &&
-            old.readinessScore == new.readinessScore
+            old.readinessScore == new.readinessScore &&
+            old.motionActivity == new.motionActivity &&
+            old.activeWorkoutType == new.activeWorkoutType
     }
 
     fun start() {
         healthDataManager.start()
         healthExtrasRepository.start()
+        motionActivityRepository.start()
+        workoutSessionRepository.start()
         scope.launch { sleepRepository.refresh() }
-        
+
         // Refresh weather when location changes
         scope.launch {
             locationRepository.locationData.collect { location ->
@@ -112,12 +128,15 @@ class SensorStateCollector @Inject constructor(
     fun stop() {
         healthDataManager.stop()
         healthExtrasRepository.stop()
+        motionActivityRepository.stop()
+        workoutSessionRepository.stop()
     }
 
     suspend fun refreshAll() {
         healthDataManager.refresh()
         healthExtrasRepository.refresh()
         sleepRepository.refresh()
+        workoutSessionRepository.refresh()
         val loc = locationRepository.currentOrLastKnown()
         weatherRepository.refresh(loc.latitude, loc.longitude, force = true)
     }

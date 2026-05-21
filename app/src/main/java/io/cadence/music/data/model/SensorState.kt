@@ -25,4 +25,10 @@ data class SensorState(
     // Readiness
     val readinessScore: Int = 0,           // 0 = unknown; 1..100 otherwise
     val readinessBreakdown: String = "",   // e.g. "Sleep +18, HRV +5, RHR -2"
+    /** On-device ActivityRecognition classification. Used by [io.cadence.music.domain.SceneDetector]
+     *  when GPS speed is ~0 (e.g., treadmill, stationary bike). */
+    val motionActivity: MotionActivity? = null,
+    /** Activity type of an in-progress workout reported by a paired watch via Health Connect.
+     *  Highest-confidence override in [io.cadence.music.domain.SceneDetector] when present. */
+    val activeWorkoutType: ActiveWorkoutType? = null,
 )
