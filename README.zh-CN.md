@@ -12,7 +12,6 @@
 
 [![平台](https://img.shields.io/badge/平台-Android%2010%2B-3DDC84?logo=android&logoColor=white)](https://developer.android.com)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
-[![App Store](https://img.shields.io/badge/App%20Store-已上线-0D96F6?logo=apple&logoColor=white)](https://apps.apple.com/us/app/cadence-ai-music/id6770579621)
 [![Google Play](https://img.shields.io/badge/Google%20Play-审核中-414141?logo=googleplay&logoColor=white)](https://play.google.com/apps/internaltest/4701327609853151006)
 
 <img src="screenshots/cadence-banner.png" alt="Cadence 概览：同质原理、两步式 AI 流水线、情景感知输出" width="100%"/>
@@ -21,17 +20,9 @@
 
 ---
 
-### 下载应用
+### 加入封闭测试
 
 **无需智能手表——仅需手机即可参与。**
-
-**iOS —— 已在 App Store 上架**
-
-<a href="https://apps.apple.com/us/app/cadence-ai-music/id6770579621"><img src="screenshots/ios-qr.png" width="160" alt="iOS App Store 二维码"/></a>
-
-[前往 App Store 下载](https://apps.apple.com/us/app/cadence-ai-music/id6770579621) · 或使用 iPhone 相机扫描二维码
-
-**Android —— 封闭测试中**
 
 [加入 Google 用户组（未完成此步骤其他链接将无法使用）](https://groups.google.com/g/cadence-ai-music) · [成为测试者](https://play.google.com/apps/testing/io.cadence.music) · [下载应用](https://play.google.com/store/apps/details?id=io.cadence.music)
 
@@ -193,6 +184,6 @@ app/
 
 <div align="center">
 
-*Cadence 已上架 App Store，并正在 Google Play 商店审核中。*
+*Cadence 正在 Google Play 商店审核中。*
 
 </div>
