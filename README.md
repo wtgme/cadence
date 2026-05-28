@@ -12,6 +12,7 @@
 
 [![Platform](https://img.shields.io/badge/platform-Android%2010%2B-3DDC84?logo=android&logoColor=white)](https://developer.android.com)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
+[![App Store](https://img.shields.io/badge/App%20Store-Available-0D96F6?logo=apple&logoColor=white)](https://apps.apple.com/us/app/cadence-ai-music/id6770579621)
 [![Google Play](https://img.shields.io/badge/Google%20Play-Under%20Review-414141?logo=googleplay&logoColor=white)](https://play.google.com/apps/internaltest/4701327609853151006)
 
 <img src="screenshots/cadence-banner.png" alt="Cadence overview: iso-principle science, two-step AI pipeline, scene-aware output" width="100%"/>
@@ -20,9 +21,17 @@
 
 ---
 
-### Join the Closed Test
+### Get the app
 
 **No smartwatch required — your phone is enough.**
+
+**iOS — live on the App Store**
+
+<a href="https://apps.apple.com/us/app/cadence-ai-music/id6770579621"><img src="screenshots/ios-qr.png" width="160" alt="iOS App Store QR code"/></a>
+
+[Download on the App Store](https://apps.apple.com/us/app/cadence-ai-music/id6770579621) · or scan the QR with your iPhone camera
+
+**Android — closed test**
 
 [Join the Google Group (without this step the other links don't work)](https://groups.google.com/g/cadence-ai-music) · [Become a tester](https://play.google.com/apps/testing/io.cadence.music) · [Download the app](https://play.google.com/store/apps/details?id=io.cadence.music)
 
@@ -184,6 +193,6 @@ app/
 
 <div align="center">
 
-*Cadence is under review for release on the Google Play Store.*
+*Cadence is live on the App Store and currently under review on Google Play.*
 
 </div>
