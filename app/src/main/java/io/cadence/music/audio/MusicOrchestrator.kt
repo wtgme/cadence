@@ -138,7 +138,15 @@ class MusicOrchestrator @Inject constructor(
         playbackStarted = true
         _playbackState.value = PlaybackState.BUFFERING
 
-        context.startService(Intent(context, MusicPlayerService::class.java))
+        // Send ACTION_PLAY immediately so the service's feed loop starts now —
+        // it suspends on bufferManager.takeNext() until the first chunk arrives,
+        // and during that suspend MusicPlayerService.maybeStartWelcomePad() plays
+        // the welcome pad. Without this, the service would only get ACTION_PLAY
+        // after the first chunk is ready, at which point hasBufferedAudio is true
+        // and the pad is skipped — leaving the cold-start wait silent.
+        context.startService(Intent(context, MusicPlayerService::class.java).apply {
+            action = MusicPlayerService.ACTION_PLAY
+        })
 
         bufferJob?.cancel()
         bufferJob = scope.launch {
@@ -149,13 +157,11 @@ class MusicOrchestrator @Inject constructor(
             lastGeneratedHr = _currentSensorState.value.heartRate
             bufferManager.prime(_currentSensorState.value, _currentScene.value)
 
-            // Wait for first chunk then start playback.
+            // Flip the UI from BUFFERING to PLAYING once real audio is available.
+            // The pad has been playing during this wait via the feed loop above.
             bufferManager.chunksReady.first { it >= 1 }
-            Log.d(TAG, "First chunk ready — starting playback")
+            Log.d(TAG, "First chunk ready — UI to PLAYING")
             _playbackState.value = PlaybackState.PLAYING
-            context.startService(Intent(context, MusicPlayerService::class.java).apply {
-                action = MusicPlayerService.ACTION_PLAY
-            })
 
             // Keep playback state in sync for the rest of the session.
             // chunksReady drops to 0 when: user skips while generating (notifySkipToNext),
