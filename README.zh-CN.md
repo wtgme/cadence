@@ -13,6 +13,7 @@
 [![平台](https://img.shields.io/badge/平台-Android%2010%2B-3DDC84?logo=android&logoColor=white)](https://developer.android.com)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
 [![Google Play](https://img.shields.io/badge/Google%20Play-审核中-414141?logo=googleplay&logoColor=white)](https://play.google.com/apps/internaltest/4701327609853151006)
+[![下载 APK](https://img.shields.io/badge/下载-APK%20v0.6.0-3DDC84?logo=android&logoColor=white)](https://github.com/wtgme/cadence/releases/download/v0.6.0/cadence-v0.6.0.apk)
 
 <img src="screenshots/cadence-banner.png" alt="Cadence 概览：同质原理、两步式 AI 流水线、情景感知输出" width="100%"/>
 
@@ -20,11 +21,19 @@
 
 ---
 
-### 加入封闭测试
+### 下载
 
 **无需智能手表——仅需手机即可参与。**
 
-[加入 Google 用户组（未完成此步骤其他链接将无法使用）](https://groups.google.com/g/cadence-ai-music) · [成为测试者](https://play.google.com/apps/testing/io.cadence.music) · [下载应用](https://play.google.com/store/apps/details?id=io.cadence.music)
+#### 直接下载 APK（旁加载）
+
+[**下载 cadence-v0.6.0.apk**](https://github.com/wtgme/cadence/releases/download/v0.6.0/cadence-v0.6.0.apk) — 需要 Android 10+（API 30）
+
+安装方法：在 Android 设置中为你的浏览器或文件管理器开启**安装未知应用**权限，然后打开下载的文件并点击**安装**。
+
+#### Google Play 封闭测试
+
+[加入 Google 用户组（必须先完成此步骤）](https://groups.google.com/g/cadence-ai-music) · [成为测试者](https://play.google.com/apps/testing/io.cadence.music) · [从 Play 商店下载](https://play.google.com/store/apps/details?id=io.cadence.music)
 
 </div>
 

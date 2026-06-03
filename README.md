@@ -13,6 +13,7 @@
 [![Platform](https://img.shields.io/badge/platform-Android%2010%2B-3DDC84?logo=android&logoColor=white)](https://developer.android.com)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
 [![Google Play](https://img.shields.io/badge/Google%20Play-Under%20Review-414141?logo=googleplay&logoColor=white)](https://play.google.com/apps/internaltest/4701327609853151006)
+[![Download APK](https://img.shields.io/badge/Download-APK%20v0.6.0-3DDC84?logo=android&logoColor=white)](https://github.com/wtgme/cadence/releases/download/v0.6.0/cadence-v0.6.0.apk)
 
 <img src="screenshots/cadence-banner.png" alt="Cadence overview: iso-principle science, two-step AI pipeline, scene-aware output" width="100%"/>
 
@@ -20,11 +21,19 @@
 
 ---
 
-### Join the Closed Test
+### Download
 
 **No smartwatch required — your phone is enough.**
 
-[Join the Google Group (without this step the other links don't work)](https://groups.google.com/g/cadence-ai-music) · [Become a tester](https://play.google.com/apps/testing/io.cadence.music) · [Download the app](https://play.google.com/store/apps/details?id=io.cadence.music)
+#### Direct APK (sideload)
+
+[**Download cadence-v0.6.0.apk**](https://github.com/wtgme/cadence/releases/download/v0.6.0/cadence-v0.6.0.apk) — Android 10+ (API 30)
+
+To install: enable **Install unknown apps** for your browser or file manager in Android Settings, then open the downloaded file and tap **Install**.
+
+#### Google Play Closed Test
+
+[Join the Google Group (required first)](https://groups.google.com/g/cadence-ai-music) · [Become a tester](https://play.google.com/apps/testing/io.cadence.music) · [Download from Play Store](https://play.google.com/store/apps/details?id=io.cadence.music)
 
 </div>
 
