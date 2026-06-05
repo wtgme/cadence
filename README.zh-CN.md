@@ -27,7 +27,11 @@
 
 #### 直接下载 APK（旁加载）
 
-[**下载 cadence-v0.6.0.apk**](https://github.com/wtgme/cadence/releases/download/v0.6.0/cadence-v0.6.0.apk) — 需要 Android 10+（API 30）
+[**下载 cadence.apk**](https://github.com/wtgme/cadence/releases/latest/download/cadence.apk) — 需要 Android 10+（API 30）
+
+<img src="screenshots/cadence-download-qr.png" width="160" alt="二维码——扫码直接下载最新版 Cadence APK"/>
+
+扫码即可在手机上直接下载。
 
 安装方法：在 Android 设置中为你的浏览器或文件管理器开启**安装未知应用**权限，然后打开下载的文件并点击**安装**。
 

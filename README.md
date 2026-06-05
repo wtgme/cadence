@@ -29,6 +29,10 @@
 
 [**Download cadence-v0.6.0.apk**](https://github.com/wtgme/cadence/releases/download/v0.6.0/cadence-v0.6.0.apk) — Android 10+ (API 30)
 
+<img src="screenshots/cadence-download-qr.png" width="160" alt="QR code — scan to download the latest Cadence APK"/>
+
+Scan to download directly on your phone.
+
 To install: enable **Install unknown apps** for your browser or file manager in Android Settings, then open the downloaded file and tap **Install**.
 
 #### Google Play Closed Test
